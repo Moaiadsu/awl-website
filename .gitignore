@@ -1,9 +1,29 @@
+# Build outputs
 .next/
-node_modules/
-.env
-.env.local
-.env.production
 out/
 build/
+
+# Dependencies
+node_modules/
+
+# Environment files — none of these should ever be committed
+.env
+.env.local
+.env.*.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.staging
+.env.production
+.env.production.local
+
+# Keys & certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Misc
 *.tsbuildinfo
 .DS_Store

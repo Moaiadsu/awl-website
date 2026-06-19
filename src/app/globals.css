@@ -1,17 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --navy-800: #0A1628;
+  --navy-900: #0A1628;
+  --navy-800: #0D2040;
+  --navy-700: #1A3356;
+  --navy-600: #1E3A5F;
+  --sky-600:  #0284C7;
   --sky-500:  #0EA5E9;
-  --gray-50:  #F8FAFC;
+  --sky-400:  #38BDF8;
+  --sky-300:  #7DD3FC;
+  --sky-100:  #E0F2FE;
+  --sidebar-w: 260px;
+  --topbar-h:  64px;
 }
 
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
-  font-family: 'Inter', sans-serif;
-  background: var(--gray-50);
+  font-family: 'Cairo', sans-serif;
+  background: #F1F5F9;
   color: #0F172A;
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
 }
