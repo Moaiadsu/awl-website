@@ -147,16 +147,35 @@ export type OdooContactRow = {
   name: string;
   email: string;
   phone: string;
-  synced_at: string;
+  street: string;
+  city: string;
+  state_name: string;
+  country_name: string;
+  vat: string;
+  website: string;
+  lang: string;
+  salesperson: string;
+  company_type: "company" | "person";
+  customer_rank: number;
+  supplier_rank: number;
 };
 
 export type OdooProductRow = {
   id: number;
   name: string;
   list_price: number;
+  standard_price: number;
   qty_available: number;
   barcode: string;
-  synced_at: string;
+  default_code: string;
+  categ_name: string;
+  type: string;
+  description_sale: string;
+  sale_ok: boolean;
+  purchase_ok: boolean;
+  weight: number;
+  volume: number;
+  image_128: string;
 };
 
 export const getOdooContacts = (): Promise<{ data: OdooContactRow[]; synced_at: string; error?: string }> =>
@@ -171,6 +190,56 @@ export const syncOdooContacts = (): Promise<{
 
 export const getOdooProducts = (): Promise<{ data: OdooProductRow[]; synced_at: string; error?: string }> =>
   fetch("/api/dashboard/products", { cache: "no-store" }).then((r) => r.json());
+
+export type NewContactPayload = {
+  name: string;
+  email?: string;
+  phone?: string;
+  street?: string;
+  street2?: string;
+  city?: string;
+  zip?: string;
+  vat?: string;
+  website?: string;
+  lang?: string;
+  job_position?: string;
+  comment?: string;
+  ref?: string;
+  company_type?: "company" | "person";
+  is_customer?: boolean;
+  is_vendor?: boolean;
+};
+
+export const deleteOdooContact = (
+  id: number,
+): Promise<{ ok?: boolean; error?: string }> =>
+  fetch(`/api/dashboard/contacts/${id}`, { method: "DELETE" }).then((r) => r.json());
+
+export const createOdooContact = (
+  data: NewContactPayload,
+): Promise<{ id?: number; alreadyExists?: boolean; error?: string }> =>
+  fetch("/api/dashboard/contacts/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: data.name,
+      ...(data.email        && { email:        data.email }),
+      ...(data.phone        && { phone:        data.phone }),
+      ...(data.street       && { street:       data.street }),
+      ...(data.street2      && { street2:      data.street2 }),
+      ...(data.city         && { city:         data.city }),
+      ...(data.zip          && { zip:          data.zip }),
+      ...(data.vat          && { vat:          data.vat }),
+      ...(data.website      && { website:      data.website }),
+      ...(data.lang         && { lang:         data.lang }),
+      ...(data.job_position && { function:     data.job_position }),
+      ...(data.comment      && { comment:      data.comment }),
+      ...(data.ref          && { ref:          data.ref }),
+      company_type:  data.company_type ?? "person",
+      customer_rank: data.is_customer ? 1 : 0,
+      supplier_rank: data.is_vendor   ? 1 : 0,
+    }),
+  }).then((r) => r.json());
 
 export const syncOdooProducts = (): Promise<{
   data: OdooProductRow[];

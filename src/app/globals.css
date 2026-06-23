@@ -20,7 +20,11 @@
 
 body {
   font-family: 'Cairo', sans-serif;
-  background: #F1F5F9;
+  background-color: #ECEEF3;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 92% 0%, rgba(10,22,40,.10) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 35% at 8% 100%, rgba(14,165,233,.05) 0%, transparent 60%);
+  background-attachment: fixed;
   color: #0F172A;
   direction: rtl;
   -webkit-font-smoothing: antialiased;

@@ -1,7 +1,9 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import Cookies from "js-cookie";
 import { adminLogout } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -177,8 +179,41 @@ function NavItem({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const payload = token.split(".")[1];
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 export default function Sidebar() {
   const path = usePathname();
+  const [adminLabel, setAdminLabel] = useState("المدير العام");
+  const [avatarLetters, setAvatarLetters] = useState("AD");
+
+  useEffect(() => {
+    const token = Cookies.get("token");
+    if (!token) return;
+    const payload = decodeJwt(token);
+    if (!payload) return;
+    const label =
+      (payload.name as string) ||
+      (payload.email as string) ||
+      (payload.sub as string) ||
+      "المدير العام";
+    const display = String(label).slice(0, 28);
+    setAdminLabel(display);
+    const words = display.trim().split(/\s+/);
+    setAvatarLetters(
+      words.length >= 2
+        ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+        : display.slice(0, 2).toUpperCase(),
+    );
+  }, []);
 
   return (
     <aside
@@ -310,7 +345,7 @@ export default function Sidebar() {
             flexShrink: 0,
           }}
         >
-          AD
+          {avatarLetters}
         </div>
 
         {/* Name */}
@@ -326,7 +361,7 @@ export default function Sidebar() {
               whiteSpace: "nowrap",
             }}
           >
-            المدير العام
+            {adminLabel}
           </div>
           <div style={{ fontSize: 11, color: "var(--sky-300)", marginTop: 1 }}>
             مسؤول النظام

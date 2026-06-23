@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { getAllOrders, updateOrderStatus } from "@/lib/api";
-import { Search } from "lucide-react";
+import { Search, ShoppingBag } from "lucide-react";
 
 type Order = {
   id: string;
@@ -77,13 +77,49 @@ export default function OrdersPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+
+      {/* ── PAGE HEADER ─────────────────────────────────── */}
+      <div style={{
+        background: "linear-gradient(145deg, #ffffff 0%, #EEF5FF 100%)",
+        borderRadius: 16, border: "1px solid rgba(14,165,233,0.12)",
+        boxShadow: "0 4px 20px rgba(10,22,40,0.07)",
+        padding: "20px 24px", marginBottom: 24,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        flexWrap: "wrap", gap: 16, overflow: "hidden", position: "relative",
+      }}>
+        <div style={{ position: "absolute", top: -30, right: -30, width: 180, height: 180, background: "radial-gradient(circle, rgba(14,165,233,0.07) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(14,165,233,0.10)", border: "1.5px solid rgba(14,165,233,0.20)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <ShoppingBag size={22} color="#0EA5E9" />
+          </div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#0A1628", letterSpacing: "-.02em", lineHeight: 1.2 }}>
+              إدارة الطلبات
+            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: "#94A3B8" }}>تتبع ومراجعة طلبات التجار</span>
+              {orders.length > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(14,165,233,0.08)", color: "#0284C7", border: "1px solid rgba(14,165,233,0.18)", padding: "2px 8px", borderRadius: 9999 }}>
+                  {orders.length} طلب
+                </span>
+              )}
+              {counts["pending"] > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(245,158,11,0.08)", color: "#B45309", border: "1px solid rgba(245,158,11,0.18)", padding: "2px 8px", borderRadius: 9999 }}>
+                  {counts["pending"]} معلق
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── TOOLBAR ─────────────────────────────────── */}
       <div
         style={{
-          background: "#fff",
-          borderRadius: 12,
-          border: "1px solid #E2E8F0",
-          boxShadow: "0 1px 2px rgba(15,23,42,.05)",
+          background: "linear-gradient(145deg, #ffffff 0%, #F4F8FF 100%)",
+          borderRadius: 14,
+          border: "1px solid rgba(14,165,233,0.10)",
+          boxShadow: "0 2px 8px rgba(10,22,40,0.05)",
           padding: "16px 20px",
           display: "flex",
           alignItems: "center",
@@ -186,17 +222,17 @@ export default function OrdersPage() {
       {/* ── TABLE ─────────────────────────────────── */}
       <div
         style={{
-          background: "#fff",
-          borderRadius: 12,
-          border: "1px solid #E2E8F0",
-          boxShadow: "0 1px 2px rgba(15,23,42,.05)",
+          background: "linear-gradient(145deg, #ffffff 0%, #F4F8FF 100%)",
+          borderRadius: 14,
+          border: "1px solid rgba(14,165,233,0.10)",
+          boxShadow: "0 2px 10px rgba(10,22,40,0.07)",
           overflow: "hidden",
         }}
       >
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-            <thead style={{ background: "#F1F5F9" }}>
-              <tr style={{ borderBottom: "1px solid #E2E8F0" }}>
+            <thead style={{ background: "rgba(10,22,40,0.03)" }}>
+              <tr style={{ borderBottom: "1px solid rgba(14,165,233,0.08)" }}>
                 <Th>رقم الطلب</Th>
                 <Th>التاجر</Th>
                 <Th width={140}>المبلغ</Th>
@@ -211,9 +247,9 @@ export default function OrdersPage() {
               {shown.map((o) => (
                 <tr
                   key={o.id}
-                  style={{ borderBottom: "1px solid #F1F5F9", transition: "background .1s" }}
+                  style={{ borderBottom: "1px solid rgba(14,165,233,0.05)", transition: "background .1s" }}
                   onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "#F8FAFC")
+                    ((e.currentTarget as HTMLElement).style.background = "rgba(14,165,233,0.03)")
                   }
                   onMouseLeave={(e) =>
                     ((e.currentTarget as HTMLElement).style.background = "transparent")

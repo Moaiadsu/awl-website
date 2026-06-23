@@ -11,14 +11,35 @@ export type OdooContact = {
   name: string;
   email: string | false;
   phone: string | false;
+  street: string | false;
+  city: string | false;
+  country_id: [number, string] | false;
+  state_id: [number, string] | false;
+  vat: string | false;
+  website: string | false;
+  lang: string | false;
+  user_id: [number, string] | false;
+  company_type: "company" | "person";
+  customer_rank: number;
+  supplier_rank: number;
 };
 
 export type OdooProduct = {
   id: number;
   name: string;
   list_price: number;
+  standard_price: number;
   qty_available: number;
   barcode: string | false;
+  default_code: string | false;
+  categ_id: [number, string] | false;
+  type: string;
+  description_sale: string | false;
+  sale_ok: boolean;
+  purchase_ok: boolean;
+  weight: number;
+  volume: number;
+  image_128: string | false;
 };
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -158,6 +179,25 @@ async function callKw<T>(
   return envelope.result as T;
 }
 
+export type NewOdooContact = {
+  name: string;
+  email?: string;
+  phone?: string;
+  street?: string;
+  street2?: string;
+  city?: string;
+  zip?: string;
+  vat?: string;
+  website?: string;
+  lang?: string;
+  function?: string;   // job position
+  comment?: string;    // internal notes
+  ref?: string;
+  company_type?: "company" | "person";
+  customer_rank?: number;
+  supplier_rank?: number;
+};
+
 // ── Public fetch functions ────────────────────────────────────────────────────
 
 export async function fetchOdooContacts(): Promise<OdooContact[]> {
@@ -166,11 +206,59 @@ export async function fetchOdooContacts(): Promise<OdooContact[]> {
     "search_read",
     [[["active", "=", true]]],
     {
-      fields: ["id", "name", "email", "phone"],
+      fields: [
+        "id", "name", "email", "phone",
+        "street", "city", "state_id", "country_id",
+        "vat", "website", "lang",
+        "user_id", "company_type",
+        "customer_rank", "supplier_rank",
+      ],
       limit: 500,
       order: "name asc",
     },
   );
+}
+
+export async function findOdooContactByNameOrPhone(
+  name: string,
+  phone?: string,
+): Promise<number | null> {
+  const domain: unknown[] = phone
+    ? ["|", ["name", "=", name], ["phone", "=", phone]]
+    : [["name", "=", name]];
+
+  const results = await callKw<Array<{ id: number }>>(
+    "res.partner",
+    "search_read",
+    [[...domain, ["active", "=", true]]],
+    { fields: ["id"], limit: 1 },
+  );
+  return results.length > 0 ? results[0].id : null;
+}
+
+export async function archiveOdooContact(id: number): Promise<boolean> {
+  return callKw<boolean>("res.partner", "write", [[id], { active: false }], {});
+}
+
+export async function createOdooContact(data: NewOdooContact): Promise<number> {
+  const payload: Record<string, unknown> = { name: data.name };
+  if (data.email)         payload.email         = data.email;
+  if (data.phone)         payload.phone         = data.phone;
+  if (data.street)        payload.street        = data.street;
+  if (data.street2)       payload.street2       = data.street2;
+  if (data.city)          payload.city          = data.city;
+  if (data.zip)           payload.zip           = data.zip;
+  if (data.vat)           payload.vat           = data.vat;
+  if (data.website)       payload.website       = data.website;
+  if (data.lang)          payload.lang          = data.lang;
+  if (data.function)      payload.function      = data.function;
+  if (data.comment)       payload.comment       = data.comment;
+  if (data.ref)           payload.ref           = data.ref;
+  if (data.company_type)  payload.company_type  = data.company_type;
+  if (data.customer_rank !== undefined) payload.customer_rank = data.customer_rank;
+  if (data.supplier_rank !== undefined) payload.supplier_rank = data.supplier_rank;
+
+  return callKw<number>("res.partner", "create", [payload], {});
 }
 
 export async function fetchOdooProducts(): Promise<OdooProduct[]> {
@@ -179,7 +267,13 @@ export async function fetchOdooProducts(): Promise<OdooProduct[]> {
     "search_read",
     [[["sale_ok", "=", true]]],
     {
-      fields: ["id", "name", "list_price", "qty_available", "barcode"],
+      fields: [
+        "id", "name", "list_price", "standard_price",
+        "qty_available", "barcode", "default_code",
+        "categ_id", "type", "description_sale",
+        "sale_ok", "purchase_ok",
+        "weight", "volume", "image_128",
+      ],
       limit: 500,
       order: "name asc",
     },

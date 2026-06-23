@@ -9,19 +9,32 @@ function bearer() {
   return token ? `Bearer ${token}` : "";
 }
 
-// GET — read synced data from the Go backend DB (never hits Odoo)
+function mapContact(c: Awaited<ReturnType<typeof fetchOdooContacts>>[number]) {
+  return {
+    id: c.id,
+    name: c.name,
+    email: c.email === false ? "" : c.email,
+    phone: c.phone === false ? "" : c.phone,
+    street: c.street === false ? "" : c.street,
+    city: c.city === false ? "" : c.city,
+    state_name: c.state_id ? c.state_id[1] : "",
+    country_name: c.country_id ? c.country_id[1] : "",
+    vat: c.vat === false ? "" : c.vat,
+    website: c.website === false ? "" : c.website,
+    lang: c.lang === false ? "" : c.lang,
+    salesperson: c.user_id ? c.user_id[1] : "",
+    company_type: c.company_type,
+    customer_rank: c.customer_rank,
+    supplier_rank: c.supplier_rank,
+  };
+}
+
+// GET — fetch directly from Odoo so all fields are available
 export async function GET() {
   try {
-    const res = await fetch(`${BACKEND}/odoo/contacts`, {
-      headers: { Authorization: bearer() },
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("[odoo/contacts] GET backend error", res.status, text);
-      return NextResponse.json({ error: `Backend ${res.status}` }, { status: res.status });
-    }
-    return NextResponse.json(await res.json());
+    const fresh = await fetchOdooContacts();
+    const data = fresh.map(mapContact);
+    return NextResponse.json({ data, synced_at: new Date().toISOString() });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch contacts";
     console.error("[odoo/contacts] GET", message);
@@ -29,32 +42,27 @@ export async function GET() {
   }
 }
 
-// POST — fetch fresh data from Odoo then save to Go backend DB
+// POST — also sync the slim subset to the Go backend DB for the mobile app
 export async function POST() {
   try {
     const fresh = await fetchOdooContacts();
-    const contacts = fresh.map((c) => ({
+    const data = fresh.map(mapContact);
+
+    const slim = fresh.map((c) => ({
       id: c.id,
       name: c.name,
       email: c.email === false ? "" : c.email,
       phone: c.phone === false ? "" : c.phone,
     }));
 
-    const res = await fetch(`${BACKEND}/odoo/contacts/sync`, {
+    fetch(`${BACKEND}/odoo/contacts/sync`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: bearer(),
-      },
-      body: JSON.stringify({ contacts }),
+      headers: { "Content-Type": "application/json", Authorization: bearer() },
+      body: JSON.stringify({ contacts: slim }),
       cache: "no-store",
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("[odoo/contacts] POST sync error", res.status, text);
-      return NextResponse.json({ error: `Backend sync ${res.status}` }, { status: res.status });
-    }
-    return NextResponse.json(await res.json());
+    }).catch((e) => console.error("[odoo/contacts] backend sync error", e));
+
+    return NextResponse.json({ data, synced_at: new Date().toISOString(), count: data.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to sync contacts";
     console.error("[odoo/contacts] POST", message);
