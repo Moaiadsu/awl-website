@@ -240,6 +240,19 @@ export async function archiveOdooContact(id: number): Promise<boolean> {
   return callKw<boolean>("res.partner", "write", [[id], { active: false }], {});
 }
 
+/// Hard-delete a contact. Odoo refuses to unlink partners referenced by other
+/// documents (invoices, orders, …) — in that case fall back to archiving.
+/// Returns how the contact was removed.
+export async function deleteOdooContact(id: number): Promise<"deleted" | "archived"> {
+  try {
+    await callKw<boolean>("res.partner", "unlink", [[id]], {});
+    return "deleted";
+  } catch {
+    await archiveOdooContact(id);
+    return "archived";
+  }
+}
+
 export async function createOdooContact(data: NewOdooContact): Promise<number> {
   const payload: Record<string, unknown> = { name: data.name };
   if (data.email)         payload.email         = data.email;

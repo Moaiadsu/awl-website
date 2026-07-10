@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { archiveOdooContact } from "@/lib/odoo";
+import { deleteOdooContact } from "@/lib/odoo";
 
 export async function DELETE(
   _req: Request,
@@ -11,10 +11,10 @@ export async function DELETE(
   }
 
   try {
-    await archiveOdooContact(id);
-    return NextResponse.json({ ok: true });
+    const mode = await deleteOdooContact(id);
+    return NextResponse.json({ ok: true, mode });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to archive contact";
+    const message = err instanceof Error ? err.message : "Failed to delete contact";
     console.error("[odoo/contacts/delete]", id, message);
     return NextResponse.json({ error: message }, { status: 502 });
   }

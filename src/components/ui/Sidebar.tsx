@@ -16,15 +16,17 @@ import {
   Bell,
   BookUser,
   Database,
+  TrendingUp,
 } from "lucide-react";
 
 // ── Nav structure ────────────────────────────────────────────────────────────
 
 const MAIN_NAV = [
-  { href: "/dashboard",           label: "الرئيسية",    icon: LayoutDashboard },
-  { href: "/dashboard/merchants", label: "التجار",      icon: Users },
-  { href: "/dashboard/orders",    label: "الطلبات",     icon: ShoppingBag },
-  { href: "/dashboard/products",  label: "المنتجات",    icon: Package },
+  { href: "/dashboard",           label: "الرئيسية",       icon: LayoutDashboard },
+  { href: "/dashboard/merchants", label: "التجار",         icon: Users },
+  { href: "/dashboard/orders",    label: "الطلبات",        icon: ShoppingBag },
+  { href: "/dashboard/products",  label: "المنتجات",       icon: Package },
+  { href: "/dashboard/trending",  label: "الرائج والعروض", icon: TrendingUp },
 ];
 
 const ODOO_NAV = [

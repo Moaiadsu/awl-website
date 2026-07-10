@@ -12,6 +12,8 @@ type Product = {
   unit: string;
   stock: number;
   min_qty: number;
+  image_url: string;
+  barcode: string;
 };
 
 const CAT_PALETTE: Record<string, { bg: string; fg: string; accent: string }> = {
@@ -191,7 +193,10 @@ export default function ProductsPage() {
           }}
         >
           {shown.map((p) => (
-            <AppProductCard key={p.id} product={p} />
+            <AppProductCard
+              key={p.id}
+              product={p}
+            />
           ))}
         </div>
       )}
@@ -236,11 +241,19 @@ function AppProductCard({ product: p }: { product: Product }) {
         height: 120,
         background: `linear-gradient(145deg, ${cat.bg} 0%, #ffffff 100%)`,
         display: "flex", alignItems: "center", justifyContent: "center",
-        borderBottom: "1px solid #F1F5F9", position: "relative",
+        borderBottom: "1px solid #F1F5F9", position: "relative", overflow: "hidden",
       }}>
-        <div style={{ textAlign: "center", opacity: 0.5 }}>
-          <Package size={38} color={cat.accent} />
-        </div>
+        {p.image_url ? (
+          <img
+            src={p.image_url}
+            alt={p.name_ar || p.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", inset: 0 }}
+          />
+        ) : (
+          <div style={{ textAlign: "center", opacity: 0.5 }}>
+            <Package size={38} color={cat.accent} />
+          </div>
+        )}
         {/* Category chip — top right */}
         <span style={{
           position: "absolute", top: 10, right: 10,
@@ -334,6 +347,7 @@ function AppProductCard({ product: p }: { product: Product }) {
             الحد الأدنى: <b style={{ color: "#334155" }}>{p.min_qty}</b>
           </span>
         </div>
+
       </div>
     </div>
   );

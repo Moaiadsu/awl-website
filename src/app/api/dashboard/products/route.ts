@@ -54,6 +54,8 @@ export async function POST() {
       list_price: p.list_price,
       qty_available: p.qty_available,
       barcode: p.barcode === false ? "" : p.barcode,
+      category: p.categ_id ? p.categ_id[1] : "",
+      image_128: p.image_128 === false ? "" : p.image_128,
     }));
 
     // Fire-and-forget sync to Go backend; don't fail the request if it's down

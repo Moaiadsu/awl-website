@@ -1,10 +1,11 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { getMerchants, updateMerchantStatus, createOdooContact } from "@/lib/api";
+import { getMerchants, updateMerchantStatus, createOdooContact, deleteMerchantEverywhere } from "@/lib/api";
 import {
   Check,
   X,
   RotateCcw,
+  Trash2,
   Search,
   Users,
   CheckCircle2,
@@ -103,6 +104,24 @@ export default function MerchantsPage() {
 
   const handle = async (id: string, status: "approved" | "rejected" | "pending") => {
     await updateMerchantStatus(id, status);
+    load();
+  };
+
+  const removeMerchant = async (m: Merchant) => {
+    const sure = window.confirm(
+      `سيتم حذف "${m.store_name}" نهائياً من التطبيق ومن Odoo. هل أنت متأكد؟`,
+    );
+    if (!sure) return;
+    try {
+      const { odoo } = await deleteMerchantEverywhere(m);
+      if (odoo === "error") {
+        window.alert("تم الحذف من التطبيق، لكن تعذّر الحذف من Odoo — احذفه يدوياً من صفحة Odoo.");
+      } else if (odoo === "archived") {
+        window.alert("تم الحذف من التطبيق. جهة الاتصال في Odoo مرتبطة بمستندات فتمت أرشفتها بدلاً من حذفها.");
+      }
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "فشل الحذف");
+    }
     load();
   };
 
@@ -395,6 +414,7 @@ export default function MerchantsPage() {
               odooState={odooState.get(m.id) ?? "idle"}
               onAction={(id, status) => handle(id, status)}
               onAddToOdoo={() => addToOdoo(m)}
+              onDelete={() => removeMerchant(m)}
             />
           ))}
         </div>
@@ -411,11 +431,13 @@ function MerchantCard({
   odooState,
   onAction,
   onAddToOdoo,
+  onDelete,
 }: {
   merchant: Merchant;
   odooState: "idle" | "loading" | "done" | "error";
   onAction: (id: string, status: "approved" | "rejected" | "pending") => void;
   onAddToOdoo: () => void;
+  onDelete: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const pal = avatarPal(m.store_name);
@@ -482,6 +504,8 @@ function MerchantCard({
             {m.status !== "rejected" && <RowAction icon={X} label="رفض" color="#B91C1C" hoverBg="#FEE2E2" onClick={() => onAction(m.id, "rejected")} />}
             {m.status !== "pending" && <RowAction icon={RotateCcw} label="إعادة للانتظار" color="#B45309" hoverBg="#FEF3C7" onClick={() => onAction(m.id, "pending")} />}
             <OdooButton state={odooState} onClick={onAddToOdoo} />
+            <div style={{ flex: 1 }} />
+            <RowAction icon={Trash2} label="حذف نهائي" color="#B91C1C" hoverBg="#FEE2E2" onClick={onDelete} />
           </div>
         </div>
       )}

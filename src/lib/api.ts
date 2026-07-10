@@ -101,6 +101,7 @@ function normProduct(p: any) {
     stock:       p.stock       ?? 0,
     description: p.description ?? "",
     image_url:   p.imageUrl    ?? p.image_url    ?? "",
+    barcode:     p.barcode     ?? "",
   };
 }
 
@@ -119,6 +120,58 @@ export const updateMerchantStatus = (
     status: statusMap[status] ?? 1,
   });
 };
+
+// Deletes the merchant from the app database (backend) AND from Odoo.
+// The Odoo step never blocks the app-side delete: a merchant that was never
+// synced simply isn't found there.
+export const deleteMerchantEverywhere = async (m: {
+  id: string;
+  store_name: string;
+  phone: string;
+}): Promise<{ odoo: "deleted" | "archived" | "not-found" | "error" }> => {
+  await rpc("awl.v1.UserService", "DeleteMerchant", { merchantId: m.id });
+
+  try {
+    const res = await fetch("/api/dashboard/contacts/delete-by-identity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: m.store_name, phone: m.phone || undefined }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { odoo: "error" };
+    if (!data.found) return { odoo: "not-found" };
+    return { odoo: data.mode === "archived" ? "archived" : "deleted" };
+  } catch {
+    return { odoo: "error" };
+  }
+};
+
+// ── Trending (ProductService) ─────────────────────────────────────────────────
+// Admin-curated "trending" selection shown in the mobile app, with a signed
+// percentage (+ up / − down).
+export const getTrending = (): Promise<Map<string, number>> =>
+  rpc<{ items?: { product: any; percent?: number }[] }>(
+    "awl.v1.ProductService", "ListTrending", {},
+  ).then((r) => new Map((r.items ?? []).map((i) => [i.product.id as string, i.percent ?? 0])));
+
+export const setTrending = (productId: string, percent: number) =>
+  rpc("awl.v1.ProductService", "SetTrending", { productId, percent });
+
+export const removeTrending = (productId: string) =>
+  rpc("awl.v1.ProductService", "RemoveTrending", { productId });
+
+// ── Offers (ProductService) ───────────────────────────────────────────────────
+// Admin-curated discount offers shown in the mobile app (percent = discount %).
+export const getOffers = (): Promise<Map<string, number>> =>
+  rpc<{ items?: { product: any; percent?: number }[] }>(
+    "awl.v1.ProductService", "ListOffers", {},
+  ).then((r) => new Map((r.items ?? []).map((i) => [i.product.id as string, i.percent ?? 0])));
+
+export const setOffer = (productId: string, percent: number) =>
+  rpc("awl.v1.ProductService", "SetOffer", { productId, percent });
+
+export const removeOffer = (productId: string) =>
+  rpc("awl.v1.ProductService", "RemoveOffer", { productId });
 
 // ── Orders (OrderService) ─────────────────────────────────────────────────────
 export const getAllOrders = () =>
