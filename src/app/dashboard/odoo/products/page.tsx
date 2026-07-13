@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   RefreshCw, Search, Package, TrendingUp, ShoppingCart,
-  Archive, ChevronDown, ChevronUp, Tag,
+  Archive, ChevronDown, ChevronUp, Tag, Layers,
 } from "lucide-react";
 import { type OdooProductRow, syncOdooProducts } from "@/lib/api";
 
@@ -379,6 +379,22 @@ function ProductCard({
           <span style={{ fontFamily: "monospace", direction: "ltr" }}>{p.qty_available}</span>
           {stockLabel}
         </span>
+        {/* Variants flag — Odoo templates with more than one generated SKU */}
+        {p.variant_count > 1 && (
+          <span
+            style={{
+              position: "absolute", bottom: 10, right: 10,
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10, fontWeight: 800, padding: "3px 9px",
+              borderRadius: 9999, background: "#F5F3FF", color: "#6D28D9",
+              border: "1px solid rgba(124,58,237,0.20)",
+              boxShadow: "0 1px 4px rgba(0,0,0,.08)",
+            }}
+          >
+            <Layers size={9} />
+            {p.variant_count} خيارات
+          </span>
+        )}
       </div>
 
       {/* Body */}

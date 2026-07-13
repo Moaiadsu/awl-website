@@ -27,3 +27,4 @@ node_modules/
 # Misc
 *.tsbuildinfo
 .DS_Store
+odoo-debug/

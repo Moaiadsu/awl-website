@@ -102,6 +102,15 @@ function normProduct(p: any) {
     description: p.description ?? "",
     image_url:   p.imageUrl    ?? p.image_url    ?? "",
     barcode:     p.barcode     ?? "",
+    variants:    (p.variants ?? []).map((v: any) => ({
+      id:        v.id,
+      label:     v.label     ?? "",
+      label_ar:  v.labelAr   ?? v.label_ar ?? "",
+      price:     v.price     ?? 0,
+      stock:     v.stock     ?? 0,
+      barcode:   v.barcode   ?? "",
+      image_url: v.imageUrl  ?? v.image_url ?? "",
+    })),
   };
 }
 
@@ -189,6 +198,9 @@ export const updateOrderStatus = (orderId: string, status: string) => {
 };
 
 // ── Products (ProductService) ─────────────────────────────────────────────────
+// Variants are imported from Odoo only (admin sync) — every sync fully
+// overwrites the catalog, so there is deliberately no API here to create or
+// edit them: the dashboard can never hold variant data that Odoo doesn't have.
 export const getProducts = () =>
   rpc<{ products: any[] }>("awl.v1.ProductService", "ListProducts", {})
     .then((r) => (r.products ?? []).map(normProduct));
@@ -229,6 +241,7 @@ export type OdooProductRow = {
   weight: number;
   volume: number;
   image_128: string;
+  variant_count: number;
 };
 
 export const getOdooContacts = (): Promise<{ data: OdooContactRow[]; synced_at: string; error?: string }> =>

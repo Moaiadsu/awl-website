@@ -40,6 +40,7 @@ export type OdooProduct = {
   weight: number;
   volume: number;
   image_128: string | false;
+  product_variant_count: number;
 };
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -136,6 +137,29 @@ async function getUid(): Promise<number> {
   return uid;
 }
 
+// ── Debug logging ─────────────────────────────────────────────────────────────
+// Set ODOO_DEBUG=1 in .env.local to dump every raw Odoo response into
+// odoo-debug/<seq>-<model>.<method>.json (full JSON, exactly as returned) and
+// log a one-line summary to the server console.
+
+let _dbgSeq = 0;
+
+async function debugDump(name: string, payload: unknown) {
+  if (!process.env.ODOO_DEBUG) return;
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const dir = path.join(process.cwd(), "odoo-debug");
+    await fs.mkdir(dir, { recursive: true });
+    const file = path.join(dir, `${String(++_dbgSeq).padStart(3, "0")}-${name}.json`);
+    await fs.writeFile(file, JSON.stringify(payload, null, 2));
+    const size = Array.isArray(payload) ? `${payload.length} records` : typeof payload;
+    console.log(`[odoo:debug] ${name} → ${file} (${size})`);
+  } catch (e) {
+    console.error("[odoo:debug] dump failed", e);
+  }
+}
+
 // ── Core RPC call ─────────────────────────────────────────────────────────────
 
 async function callKw<T>(
@@ -176,6 +200,7 @@ async function callKw<T>(
     );
   }
 
+  await debugDump(`${model}.${method}`, envelope.result);
   return envelope.result as T;
 }
 
@@ -199,6 +224,13 @@ export type NewOdooContact = {
 };
 
 // ── Public fetch functions ────────────────────────────────────────────────────
+
+// Translated fields (product names, attribute values …) are stored per
+// language; without a lang context Odoo returns the base-language (en_US)
+// value — NOT what the team edits in the Arabic UI. Read catalog data in the
+// store's working language so renames actually reach the sync.
+const ODOO_LANG = process.env.ODOO_LANG ?? "ar_001";
+const langCtx = { lang: ODOO_LANG };
 
 export async function fetchOdooContacts(): Promise<OdooContact[]> {
   return callKw<OdooContact[]>(
@@ -286,9 +318,197 @@ export async function fetchOdooProducts(): Promise<OdooProduct[]> {
         "categ_id", "type", "description_sale",
         "sale_ok", "purchase_ok",
         "weight", "volume", "image_128",
+        "product_variant_count",
       ],
       limit: 500,
       order: "name asc",
+      context: langCtx,
     },
   );
+}
+
+// ── Product variants ──────────────────────────────────────────────────────────
+//
+// Odoo splits "a product" across models:
+//   product.template                  — the parent (what fetchOdooProducts reads)
+//   product.product                   — one sellable SKU per attribute combination;
+//                                       carries its own price (lst_price =
+//                                       template price + price_extra), stock and barcode
+//   product.template.attribute.value  — the combination entries a variant points to
+//                                       via product_template_attribute_value_ids;
+//                                       its name is the value ("5L"), attribute_id
+//                                       names the axis ("Size")
+
+/// One sellable SKU of a template, with its combination resolved to a label.
+export type OdooVariant = {
+  id: number;            // product.product id
+  templateId: number;    // parent product.template id
+  label: string;         // attribute values joined, e.g. "Blue / 5L"
+  price: number;         // variant sales price (lst_price)
+  stock: number;         // variant-level qty_available
+  barcode: string;
+  image: string;         // variant-specific image (base64); "" = inherits template image
+};
+
+type RawVariant = {
+  id: number;
+  product_tmpl_id: [number, string];
+  lst_price: number;
+  qty_available: number;
+  barcode: string | false;
+  default_code: string | false;
+  product_template_attribute_value_ids: number[];
+};
+
+/// Fetches all variants (product.product) for the given templates and resolves
+/// each variant's attribute combination to a human label. Templates with a
+/// single variant are omitted — their lone SKU *is* the template.
+export async function fetchOdooVariantsByTemplate(
+  templateIds: number[],
+): Promise<Map<number, OdooVariant[]>> {
+  const byTemplate = new Map<number, OdooVariant[]>();
+  if (templateIds.length === 0) return byTemplate;
+
+  // 1. All active SKUs of the requested templates in one call.
+  const raw = await callKw<RawVariant[]>(
+    "product.product",
+    "search_read",
+    [[["product_tmpl_id", "in", templateIds], ["active", "=", true]]],
+    {
+      fields: [
+        "id", "product_tmpl_id", "lst_price", "qty_available",
+        "barcode", "default_code", "product_template_attribute_value_ids",
+      ],
+      limit: 5000,
+      context: langCtx,
+    },
+  );
+
+  // 2. Resolve every referenced combination entry to a clear "attribute: value"
+  //    label ("اللون: احمر"), keyed by product.template.attribute.value id.
+  const ptavIds = Array.from(
+    new Set(raw.flatMap((v) => v.product_template_attribute_value_ids)),
+  );
+  const valueLabel = new Map<number, string>();
+  // combination entry → underlying product.attribute.value (carries the
+  // swatch/photo an admin can set on the value in "الخصائص والمتغيرات")
+  const rawValueOf = new Map<number, number>();
+  if (ptavIds.length > 0) {
+    const values = await callKw<
+      Array<{
+        id: number;
+        name: string;
+        attribute_id: [number, string];
+        product_attribute_value_id: [number, string] | false;
+      }>
+    >(
+      "product.template.attribute.value",
+      "read",
+      [ptavIds],
+      {
+        fields: ["id", "name", "attribute_id", "product_attribute_value_id"],
+        context: langCtx,
+      },
+    );
+    for (const v of values) {
+      const attr = v.attribute_id ? v.attribute_id[1] : "";
+      valueLabel.set(v.id, attr ? `${attr}: ${v.name}` : v.name);
+      if (v.product_attribute_value_id) {
+        rawValueOf.set(v.id, v.product_attribute_value_id[0]);
+      }
+    }
+  }
+
+  // 3. Group SKUs under their template, labelling each by its combination
+  //    (falling back to the internal reference for combination-less SKUs).
+  for (const v of raw) {
+    const label =
+      v.product_template_attribute_value_ids
+        .map((id) => valueLabel.get(id))
+        .filter(Boolean)
+        .join(" • ") ||
+      (v.default_code === false ? "" : v.default_code);
+    const list = byTemplate.get(v.product_tmpl_id[0]) ?? [];
+    list.push({
+      id: v.id,
+      templateId: v.product_tmpl_id[0],
+      label,
+      price: v.lst_price,
+      stock: Math.max(0, Math.round(v.qty_available)),
+      barcode: v.barcode === false ? "" : v.barcode,
+      image: "",
+    });
+    byTemplate.set(v.product_tmpl_id[0], list);
+  }
+
+  // Single-variant templates carry no variations worth showing; the rest are
+  // sorted by label so clients render a stable, readable order.
+  byTemplate.forEach((list, tid) => {
+    if (list.length <= 1) {
+      byTemplate.delete(tid);
+    } else {
+      list.sort((a, b) => a.label.localeCompare(b.label, "ar"));
+    }
+  });
+
+  // 4. Variant images for the SKUs that survived the grouping. Resolution
+  //    chain: the SKU's own photo (image_variant_128) → the photo set on the
+  //    attribute value itself (product.attribute.value.image — where the
+  //    "الخصائص والمتغيرات" upload lands) → empty, so clients fall back to
+  //    the parent product image.
+  const keptIds: number[] = [];
+  byTemplate.forEach((list) => list.forEach((v) => keptIds.push(v.id)));
+  const imageBySku = new Map<number, string>();
+  const ptavBySku = new Map<number, number[]>();
+  for (const v of raw) ptavBySku.set(v.id, v.product_template_attribute_value_ids);
+  for (let i = 0; i < keptIds.length; i += 200) {
+    const chunk = await callKw<Array<{ id: number; image_variant_128: string | false }>>(
+      "product.product",
+      "read",
+      [keptIds.slice(i, i + 200)],
+      { fields: ["id", "image_variant_128"] },
+    );
+    for (const c of chunk) {
+      if (c.image_variant_128 !== false) imageBySku.set(c.id, c.image_variant_128);
+    }
+  }
+
+  // Attribute-value photos, only for the values still needed after step one.
+  const neededValueIds = new Set<number>();
+  for (const id of keptIds) {
+    if (imageBySku.has(id)) continue;
+    for (const ptav of ptavBySku.get(id) ?? []) {
+      const rawId = rawValueOf.get(ptav);
+      if (rawId) neededValueIds.add(rawId);
+    }
+  }
+  const imageByValue = new Map<number, string>();
+  const valueIdList = Array.from(neededValueIds);
+  for (let i = 0; i < valueIdList.length; i += 100) {
+    const chunk = await callKw<Array<{ id: number; image: string | false }>>(
+      "product.attribute.value",
+      "read",
+      [valueIdList.slice(i, i + 100)],
+      { fields: ["id", "image"] },
+    );
+    for (const c of chunk) {
+      if (c.image !== false) imageByValue.set(c.id, c.image);
+    }
+  }
+
+  byTemplate.forEach((list) =>
+    list.forEach((v) => {
+      let img = imageBySku.get(v.id) ?? "";
+      if (!img) {
+        for (const ptav of ptavBySku.get(v.id) ?? []) {
+          const rawId = rawValueOf.get(ptav);
+          const valueImg = rawId ? imageByValue.get(rawId) : undefined;
+          if (valueImg) { img = valueImg; break; }
+        }
+      }
+      v.image = img;
+    }),
+  );
+
+  return byTemplate;
 }

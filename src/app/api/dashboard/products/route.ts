@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { fetchOdooProducts } from "@/lib/odoo";
+import { fetchOdooProducts, fetchOdooVariantsByTemplate } from "@/lib/odoo";
 
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8080";
 
@@ -26,6 +26,7 @@ function mapProduct(p: Awaited<ReturnType<typeof fetchOdooProducts>>[number]) {
     weight: p.weight,
     volume: p.volume,
     image_128: p.image_128 === false ? "" : p.image_128,
+    variant_count: p.product_variant_count ?? 1,
   };
 }
 
@@ -48,6 +49,15 @@ export async function POST() {
     const fresh = await fetchOdooProducts();
     const data = fresh.map(mapProduct);
 
+    // Resolve each template's generated SKUs (product.product) so size/pack
+    // variations reach the app catalog. Sync still succeeds without them.
+    const variantsByTemplate = await fetchOdooVariantsByTemplate(
+      fresh.map((p) => p.id),
+    ).catch((e) => {
+      console.error("[odoo/products] variant fetch error", e);
+      return new Map<number, never[]>();
+    });
+
     const slim = fresh.map((p) => ({
       id: p.id,
       name: p.name,
@@ -56,17 +66,57 @@ export async function POST() {
       barcode: p.barcode === false ? "" : p.barcode,
       category: p.categ_id ? p.categ_id[1] : "",
       image_128: p.image_128 === false ? "" : p.image_128,
+      variants: (variantsByTemplate.get(p.id) ?? []).map((v) => ({
+        id: `odoo-var-${v.id}`,
+        label: v.label,
+        label_ar: v.label, // Odoo carries one name; Arabic falls back to it
+        price: v.price,
+        stock: v.stock,
+        barcode: v.barcode,
+        // data URI so no extra fetch is needed; empty = use the product image
+        image_url: v.image ? `data:image/png;base64,${v.image}` : "",
+      })),
     }));
 
-    // Fire-and-forget sync to Go backend; don't fail the request if it's down
-    fetch(`${BACKEND}/odoo/products/sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: bearer() },
-      body: JSON.stringify({ products: slim }),
-      cache: "no-store",
-    }).catch((e) => console.error("[odoo/products] backend sync error", e));
+    // With ODOO_DEBUG=1, also dump the exact payload pushed to the Go backend
+    // (post-mapping — what the app catalog will contain).
+    if (process.env.ODOO_DEBUG) {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const dir = path.join(process.cwd(), "odoo-debug");
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        path.join(dir, "sync-payload.json"),
+        JSON.stringify(slim, null, 2),
+      ).catch((e) => console.error("[odoo:debug] payload dump failed", e));
+      console.log(`[odoo:debug] sync payload → odoo-debug/sync-payload.json (${slim.length} products)`);
+    }
 
-    return NextResponse.json({ data, synced_at: new Date().toISOString(), count: data.length });
+    // Sync to the Go backend and report the real outcome — a 401 (expired
+    // session) or backend-down must be visible, not silently swallowed.
+    let backendSync = "ok";
+    try {
+      const res = await fetch(`${BACKEND}/odoo/products/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: bearer() },
+        body: JSON.stringify({ products: slim }),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        backendSync = `failed: HTTP ${res.status}`;
+        console.error("[odoo/products] backend sync failed", res.status);
+      }
+    } catch (e) {
+      backendSync = "failed: backend unreachable";
+      console.error("[odoo/products] backend sync error", e);
+    }
+
+    return NextResponse.json({
+      data,
+      synced_at: new Date().toISOString(),
+      count: data.length,
+      backend_sync: backendSync,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to sync products";
     console.error("[odoo/products] POST", message);

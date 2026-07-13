@@ -302,7 +302,7 @@ function TrendingCard({
           {p.name_ar || p.name}
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: "#0EA5E9", lineHeight: 1 }}>
-          {p.price}
+          {p.price.toFixed(2)}
           <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B", marginRight: 3 }}>د.ل</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 8, borderTop: "1px dashed rgba(14,165,233,0.08)", marginTop: "auto" }}>
@@ -373,7 +373,7 @@ function OfferCard({
           {p.name_ar || p.name}
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: "#0EA5E9", lineHeight: 1 }}>
-          {p.price}
+          {p.price.toFixed(2)}
           <span style={{ fontSize: 11, fontWeight: 600, color: "#64748B", marginRight: 3 }}>د.ل</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, paddingTop: 8, borderTop: "1px dashed rgba(249,115,22,0.10)", marginTop: "auto" }}>
