@@ -36,7 +36,7 @@ export default function TrendingOffersPage() {
   const [products, setProducts]     = useState<Product[]>([]);
   const [trendMap, setTrendMap]     = useState<Map<string, number>>(new Map());
   const [offersMap, setOffersMap]   = useState<Map<string, number>>(new Map());
-  const [tab, setTab]               = useState<Tab>("trending");
+  const tab: Tab = "offers"; // trending products were replaced by the market index
   const [search, setSearch]         = useState("");
 
   const reload = () => {
@@ -119,54 +119,21 @@ export default function TrendingOffersPage() {
           </div>
           <div>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#0A1628", letterSpacing: "-.02em", lineHeight: 1.2 }}>
-              الرائج والعروض
+              العروض
             </h1>
             <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 5 }}>
-              إدارة المنتجات الرائجة والعروض الخاصة
+              إدارة العروض الخاصة — مؤشر السوق يُدار من صفحته المستقلة
             </div>
           </div>
         </div>
 
         {/* Stat badges */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, background: "rgba(16,185,129,0.08)", color: "#065F46", border: "1px solid rgba(16,185,129,0.20)", padding: "4px 12px", borderRadius: 9999 }}>
-            <TrendingUp size={11} style={{ verticalAlign: "middle", marginLeft: 4 }} />
-            {trendMap.size} رائج
-          </span>
           <span style={{ fontSize: 12, fontWeight: 700, background: "rgba(249,115,22,0.08)", color: "#9A3412", border: "1px solid rgba(249,115,22,0.20)", padding: "4px 12px", borderRadius: 9999 }}>
             <Percent size={11} style={{ verticalAlign: "middle", marginLeft: 4 }} />
             {offersMap.size} عرض
           </span>
         </div>
-      </div>
-
-      {/* ── TABS ─────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-        {([ ["trending", "المنتجات الرائجة", TrendingUp, "#10B981"], ["offers", "العروض", Percent, "#F97316"] ] as const).map(([key, label, Icon, color]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key as Tab)}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              padding: "8px 20px", borderRadius: 10, cursor: "pointer",
-              fontSize: 14, fontWeight: 700,
-              background: tab === key ? color + "18" : "#F8FAFC",
-              color: tab === key ? color : "#64748B",
-              border: `1.5px solid ${tab === key ? color + "44" : "#E2E8F0"}`,
-              transition: "all .15s",
-            }}
-          >
-            <Icon size={15} />
-            {label}
-            <span style={{
-              fontSize: 11, fontWeight: 800, padding: "1px 7px", borderRadius: 9999,
-              background: tab === key ? color + "22" : "#E2E8F0",
-              color: tab === key ? color : "#94A3B8",
-            }}>
-              {key === "trending" ? trendMap.size : offersMap.size}
-            </span>
-          </button>
-        ))}
       </div>
 
       {/* ── SEARCH ─────────────────────────────────── */}
@@ -203,25 +170,15 @@ export default function TrendingOffersPage() {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-          {shown.map((p) =>
-            tab === "trending" ? (
-              <TrendingCard
-                key={p.id}
-                product={p}
-                percent={trendMap.get(p.id)}
-                onSet={() => onSetTrending(p)}
-                onRemove={() => onRemoveTrending(p)}
-              />
-            ) : (
-              <OfferCard
-                key={p.id}
-                product={p}
-                percent={offersMap.get(p.id)}
-                onSet={() => onSetOffer(p)}
-                onRemove={() => onRemoveOffer(p)}
-              />
-            )
-          )}
+          {shown.map((p) => (
+            <OfferCard
+              key={p.id}
+              product={p}
+              percent={offersMap.get(p.id)}
+              onSet={() => onSetOffer(p)}
+              onRemove={() => onRemoveOffer(p)}
+            />
+          ))}
         </div>
       )}
     </div>

@@ -17,6 +17,8 @@ import {
   BookUser,
   Database,
   TrendingUp,
+  MessageSquareText,
+  LineChart,
 } from "lucide-react";
 
 // ── Nav structure ────────────────────────────────────────────────────────────
@@ -26,7 +28,9 @@ const MAIN_NAV = [
   { href: "/dashboard/merchants", label: "التجار",         icon: Users },
   { href: "/dashboard/orders",    label: "الطلبات",        icon: ShoppingBag },
   { href: "/dashboard/products",  label: "المنتجات",       icon: Package },
-  { href: "/dashboard/trending",  label: "الرائج والعروض", icon: TrendingUp },
+  { href: "/dashboard/market-index", label: "مؤشر السوق", icon: LineChart },
+  { href: "/dashboard/trending",  label: "العروض",         icon: TrendingUp },
+  { href: "/dashboard/otp-logs",  label: "سجل رموز التحقق", icon: MessageSquareText },
 ];
 
 const ODOO_NAV = [

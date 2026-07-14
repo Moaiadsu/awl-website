@@ -1,7 +1,20 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { getAllOrders, updateOrderStatus } from "@/lib/api";
-import { Search, ShoppingBag } from "lucide-react";
+import { getAllOrders, updateOrderStatus, getMerchants } from "@/lib/api";
+import PaymentsPanel from "@/components/PaymentsPanel";
+import {
+  Search, ShoppingBag, Wallet, ChevronDown, ChevronUp,
+  MapPin, StickyNote, Tag, Banknote, Smartphone, Receipt, Phone,
+} from "lucide-react";
+
+type OrderItem = {
+  product_id: string;
+  product_name: string;
+  qty: number;
+  unit_price: number;
+  total: number;
+  unit_label: string;
+};
 
 type Order = {
   id: string;
@@ -9,18 +22,20 @@ type Order = {
   total_amount: number;
   status: string;
   address: string;
+  note: string;
   created_at: string;
-  items: any[];
+  coupon_code: string;
+  discount: number;
+  payment_method: string;
+  items: OrderItem[];
 };
+
+type Merchant = { id: string; store_name: string; phone: string; city: string };
 
 type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered" | "cancelled";
 
 const ORDER_STATUSES: OrderStatus[] = [
-  "pending",
-  "confirmed",
-  "shipped",
-  "delivered",
-  "cancelled",
+  "pending", "confirmed", "shipped", "delivered", "cancelled",
 ];
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -31,21 +46,31 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "ملغي",
 };
 
-const FILTER_LABELS: Record<string, string> = {
-  all: "الكل",
-  ...STATUS_LABELS,
+const FILTER_LABELS: Record<string, string> = { all: "الكل", ...STATUS_LABELS };
+
+const PM_LABEL: Record<string, { label: string; icon: React.ReactNode }> = {
+  cod:   { label: "الدفع عند الاستلام", icon: <Banknote size={12} /> },
+  sadad: { label: "سداد",              icon: <Smartphone size={12} /> },
+  check: { label: "صك مصرفي",          icon: <Receipt size={12} /> },
 };
 
 export default function OrdersPage() {
+  const [tab, setTab] = useState<"orders" | "payments">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
+  const [merchants, setMerchants] = useState<Map<string, Merchant>>(new Map());
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  const load = () => getAllOrders().then(setOrders).catch(() => {});
+  const load = () => {
+    getAllOrders().then(setOrders).catch(() => {});
+    getMerchants()
+      .then((ms: any[]) =>
+        setMerchants(new Map(ms.map((m) => [m.id, m as Merchant]))))
+      .catch(() => {});
+  };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(load, []);
 
   const handle = async (id: string, status: string) => {
     await updateOrderStatus(id, status);
@@ -65,15 +90,18 @@ export default function OrdersPage() {
     let list = filter === "all" ? orders : orders.filter((o) => o.status === filter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(
-        (o) =>
+      list = list.filter((o) => {
+        const m = merchants.get(o.user_id);
+        return (
           o.id?.toLowerCase().includes(q) ||
           o.address?.toLowerCase().includes(q) ||
-          o.user_id?.toLowerCase().includes(q),
-      );
+          m?.store_name?.toLowerCase().includes(q) ||
+          m?.phone?.includes(q)
+        );
+      });
     }
     return list;
-  }, [orders, filter, search]);
+  }, [orders, filter, search, merchants]);
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
@@ -83,289 +111,282 @@ export default function OrdersPage() {
         background: "linear-gradient(145deg, #ffffff 0%, #EEF5FF 100%)",
         borderRadius: 16, border: "1px solid rgba(14,165,233,0.12)",
         boxShadow: "0 4px 20px rgba(10,22,40,0.07)",
-        padding: "20px 24px", marginBottom: 24,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        flexWrap: "wrap", gap: 16, overflow: "hidden", position: "relative",
+        padding: "20px 24px", marginBottom: 18,
+        display: "flex", alignItems: "center", gap: 14,
       }}>
-        <div style={{ position: "absolute", top: -30, right: -30, width: 180, height: 180, background: "radial-gradient(circle, rgba(14,165,233,0.07) 0%, transparent 70%)", pointerEvents: "none" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(14,165,233,0.10)", border: "1.5px solid rgba(14,165,233,0.20)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <ShoppingBag size={22} color="#0EA5E9" />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#0A1628", letterSpacing: "-.02em", lineHeight: 1.2 }}>
-              إدارة الطلبات
-            </h1>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, color: "#94A3B8" }}>تتبع ومراجعة طلبات التجار</span>
-              {orders.length > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(14,165,233,0.08)", color: "#0284C7", border: "1px solid rgba(14,165,233,0.18)", padding: "2px 8px", borderRadius: 9999 }}>
-                  {orders.length} طلب
-                </span>
-              )}
-              {counts["pending"] > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(245,158,11,0.08)", color: "#B45309", border: "1px solid rgba(245,158,11,0.18)", padding: "2px 8px", borderRadius: 9999 }}>
-                  {counts["pending"]} معلق
-                </span>
-              )}
-            </div>
+        <div style={{ width: 46, height: 46, borderRadius: 13, background: "rgba(14,165,233,0.10)", border: "1.5px solid rgba(14,165,233,0.20)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <ShoppingBag size={22} color="#0EA5E9" />
+        </div>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#0A1628" }}>إدارة الطلبات</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: "#94A3B8" }}>تتبع الطلبات والمدفوعات وتفاصيل التوصيل</span>
+            {counts["pending"] > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, background: "rgba(245,158,11,0.08)", color: "#B45309", border: "1px solid rgba(245,158,11,0.18)", padding: "2px 8px", borderRadius: 9999 }}>
+                {counts["pending"]} معلق
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ── TOOLBAR ─────────────────────────────────── */}
-      <div
-        style={{
-          background: "linear-gradient(145deg, #ffffff 0%, #F4F8FF 100%)",
-          borderRadius: 14,
-          border: "1px solid rgba(14,165,233,0.10)",
-          boxShadow: "0 2px 8px rgba(10,22,40,0.05)",
-          padding: "16px 20px",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 16,
-        }}
-      >
-        <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 340 }}>
-          <Search
-            size={16}
+      {/* ── SUB-TABS: orders / payments ───────────────────── */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {([
+          ["orders", "الطلبات", <ShoppingBag key="o" size={15} />],
+          ["payments", "المدفوعات", <Wallet key="p" size={15} />],
+        ] as const).map(([key, label, icon]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
             style={{
-              position: "absolute",
-              right: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "#94A3B8",
-              pointerEvents: "none",
+              display: "inline-flex", alignItems: "center", gap: 7,
+              fontSize: 13.5, fontWeight: 800, padding: "10px 22px",
+              borderRadius: 12, cursor: "pointer", fontFamily: "Cairo, sans-serif",
+              background: tab === key ? "#0A1628" : "#fff",
+              color: tab === key ? "#fff" : "#64748B",
+              border: `1.5px solid ${tab === key ? "#0A1628" : "#E2E8F0"}`,
+              transition: "all .15s",
             }}
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="البحث في الطلبات..."
-            style={{
-              height: 36,
-              width: "100%",
-              padding: "0 40px 0 12px",
-              border: "1.5px solid #E2E8F0",
-              borderRadius: 8,
-              fontFamily: "Cairo, sans-serif",
-              fontSize: 14,
-              color: "#1E293B",
-              background: "#F8FAFC",
-              outline: "none",
-              direction: "rtl",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = "#0EA5E9";
-              e.currentTarget.style.background = "#fff";
-              e.currentTarget.style.boxShadow = "0 0 0 3px rgba(14,165,233,.12)";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = "#E2E8F0";
-              e.currentTarget.style.background = "#F8FAFC";
-              e.currentTarget.style.boxShadow = "none";
-            }}
-          />
-        </div>
+          >
+            {icon} {label}
+          </button>
+        ))}
+      </div>
 
-        <div style={{ width: 1, height: 24, background: "#E2E8F0" }} />
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#64748B" }}>الحالة:</span>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {(["all", ...ORDER_STATUSES] as string[]).map((f) => {
-              const active = filter === f;
-              return (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  style={{
-                    height: 32,
-                    padding: "0 12px",
-                    borderRadius: 8,
-                    border: `1.5px solid ${active ? "#0A1628" : "#E2E8F0"}`,
-                    fontFamily: "Cairo, sans-serif",
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: active ? "#fff" : "#64748B",
-                    background: active ? "#0A1628" : "#fff",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    whiteSpace: "nowrap",
-                    transition: "all .15s",
-                  }}
-                >
-                  {FILTER_LABELS[f]}
-                  <span
+      {tab === "payments" ? (
+        <PaymentsPanel />
+      ) : (
+        <>
+          {/* ── TOOLBAR ─────────────────────────────────── */}
+          <div style={{
+            background: "linear-gradient(145deg, #ffffff 0%, #F4F8FF 100%)",
+            borderRadius: 14, border: "1px solid rgba(14,165,233,0.10)",
+            boxShadow: "0 2px 8px rgba(10,22,40,0.05)",
+            padding: "14px 20px",
+            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+            marginBottom: 16,
+          }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 340 }}>
+              <Search size={16} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#94A3B8", pointerEvents: "none" }} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="بحث: رقم الطلب، المتجر، الهاتف، العنوان..."
+                style={{
+                  height: 36, width: "100%", padding: "0 40px 0 12px",
+                  border: "1.5px solid #E2E8F0", borderRadius: 8,
+                  fontFamily: "Cairo, sans-serif", fontSize: 13.5,
+                  color: "#1E293B", background: "#F8FAFC", outline: "none", direction: "rtl",
+                }}
+              />
+            </div>
+            <div style={{ width: 1, height: 24, background: "#E2E8F0" }} />
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {(["all", ...ORDER_STATUSES] as string[]).map((f) => {
+                const active = filter === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
                     style={{
-                      padding: "1px 6px",
-                      borderRadius: 9999,
+                      height: 32, padding: "0 12px", borderRadius: 8,
+                      border: `1.5px solid ${active ? "#0A1628" : "#E2E8F0"}`,
+                      fontFamily: "Cairo, sans-serif", fontSize: 12, fontWeight: 700,
+                      color: active ? "#fff" : "#64748B",
+                      background: active ? "#0A1628" : "#fff",
+                      cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {FILTER_LABELS[f]}
+                    <span style={{
+                      padding: "1px 6px", borderRadius: 9999,
                       background: active ? "rgba(255,255,255,.2)" : "#F1F5F9",
                       color: active ? "#fff" : "#64748B",
-                      fontSize: 10,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {counts[f] ?? 0}
-                  </span>
-                </button>
-              );
-            })}
+                      fontSize: 10, fontWeight: 700,
+                    }}>
+                      {counts[f] ?? 0}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* ── TABLE ─────────────────────────────────── */}
-      <div
-        style={{
-          background: "linear-gradient(145deg, #ffffff 0%, #F4F8FF 100%)",
-          borderRadius: 14,
-          border: "1px solid rgba(14,165,233,0.10)",
-          boxShadow: "0 2px 10px rgba(10,22,40,0.07)",
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-            <thead style={{ background: "rgba(10,22,40,0.03)" }}>
-              <tr style={{ borderBottom: "1px solid rgba(14,165,233,0.08)" }}>
-                <Th>رقم الطلب</Th>
-                <Th>التاجر</Th>
-                <Th width={140}>المبلغ</Th>
-                <Th width={140}>الحالة</Th>
-                <Th width={140}>التاريخ</Th>
-                <Th width={170} center>
-                  الإجراء
-                </Th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((o) => (
-                <tr
-                  key={o.id}
-                  style={{ borderBottom: "1px solid rgba(14,165,233,0.05)", transition: "background .1s" }}
-                  onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "rgba(14,165,233,0.03)")
-                  }
-                  onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLElement).style.background = "transparent")
-                  }
-                >
-                  <Td>
+          {/* ── ORDERS LIST (expandable cards) ─────────────── */}
+          {shown.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 60, color: "#94A3B8", fontSize: 14 }}>
+              لا توجد طلبات
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {shown.map((o) => {
+                const m = merchants.get(o.user_id);
+                const open = expanded === o.id;
+                const pm = PM_LABEL[o.payment_method];
+                return (
+                  <div key={o.id} style={{
+                    background: "linear-gradient(145deg, #ffffff 0%, #F5F9FF 100%)",
+                    borderRadius: 14,
+                    border: `1.5px solid ${open ? "rgba(14,165,233,0.30)" : "rgba(14,165,233,0.10)"}`,
+                    boxShadow: open ? "0 8px 28px rgba(10,22,40,0.10)" : "0 2px 8px rgba(10,22,40,0.05)",
+                    overflow: "hidden",
+                  }}>
+                    {/* ── Row header ── */}
                     <div
+                      onClick={() => setExpanded(open ? null : o.id)}
                       style={{
-                        fontWeight: 700,
-                        color: "#1E293B",
-                        fontFamily: "Courier New, monospace",
-                        direction: "ltr",
-                        textAlign: "right",
+                        padding: "13px 18px", display: "flex", alignItems: "center",
+                        gap: 14, cursor: "pointer", flexWrap: "wrap",
                       }}
                     >
-                      #{o.id?.slice(0, 8)}
+                      <div style={{ minWidth: 90 }}>
+                        <div style={{ fontWeight: 800, color: "#0A1628", fontFamily: "Courier New, monospace", direction: "ltr", textAlign: "right", fontSize: 13 }}>
+                          #{o.id?.slice(0, 8)}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
+                          {o.items?.length ?? 0} عنصر · {formatDate(o.created_at)}
+                        </div>
+                      </div>
+
+                      {/* Merchant identity */}
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <div style={{ fontWeight: 800, color: "#0A1628", fontSize: 13.5 }}>
+                          {m?.store_name || "تاجر غير معروف"}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "#64748B", display: "flex", gap: 10, marginTop: 2, flexWrap: "wrap" }}>
+                          {m?.phone && (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                              <Phone size={10} /> <span dir="ltr">{m.phone}</span>
+                            </span>
+                          )}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            <MapPin size={10} /> {o.address || m?.city || "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {pm && (
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                          fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 9999,
+                          background: "#F0F9FF", color: "#0284C7", border: "1px solid rgba(14,165,233,0.18)",
+                        }}>
+                          {pm.icon} {pm.label}
+                        </span>
+                      )}
+
+                      <span style={{ fontWeight: 900, color: "#0EA5E9", direction: "ltr", fontSize: 15 }}>
+                        {o.total_amount.toFixed(2)} د.ل
+                      </span>
+
+                      <OrderStatusBadge status={o.status} />
+
+                      <select
+                        value={o.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handle(o.id, e.target.value)}
+                        style={{
+                          height: 32, padding: "0 10px",
+                          border: "1.5px solid #E2E8F0", borderRadius: 8,
+                          fontFamily: "Cairo, sans-serif", fontSize: 12, fontWeight: 600,
+                          color: "#475569", background: "#fff", outline: "none", cursor: "pointer",
+                        }}
+                      >
+                        {ORDER_STATUSES.map((s) => (
+                          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                        ))}
+                      </select>
+
+                      {open ? <ChevronUp size={16} color="#94A3B8" /> : <ChevronDown size={16} color="#94A3B8" />}
                     </div>
-                    <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
-                      {o.items?.length ?? 0} عنصر
-                    </div>
-                  </Td>
-                  <Td>
-                    <div style={{ color: "#475569", fontSize: 13 }}>
-                      {o.address || "—"}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "#CBD5E1",
-                        marginTop: 2,
-                        fontFamily: "Courier New, monospace",
-                        direction: "ltr",
-                      }}
-                    >
-                      {o.user_id?.slice(0, 12)}
-                    </div>
-                  </Td>
-                  <Td>
-                    <span
-                      style={{
-                        fontWeight: 800,
-                        color: "#0EA5E9",
-                        direction: "ltr",
-                        display: "inline-block",
-                      }}
-                    >
-                      {o.total_amount} د.ل
-                    </span>
-                  </Td>
-                  <Td>
-                    <OrderStatusBadge status={o.status} />
-                  </Td>
-                  <Td>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "#94A3B8",
-                        direction: "ltr",
-                        display: "inline-block",
-                      }}
-                    >
-                      {formatDate(o.created_at)}
-                    </span>
-                  </Td>
-                  <Td center>
-                    <select
-                      value={o.status}
-                      onChange={(e) => handle(o.id, e.target.value)}
-                      style={{
-                        height: 32,
-                        padding: "0 12px",
-                        paddingLeft: 28,
-                        border: "1.5px solid #E2E8F0",
-                        borderRadius: 8,
-                        fontFamily: "Cairo, sans-serif",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: "#475569",
-                        background: "#fff",
-                        outline: "none",
-                        cursor: "pointer",
-                        appearance: "none",
-                        backgroundImage:
-                          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-                        backgroundRepeat: "no-repeat",
-                        backgroundPosition: "left 8px center",
-                        direction: "rtl",
-                      }}
-                    >
-                      {ORDER_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {STATUS_LABELS[s]}
-                        </option>
-                      ))}
-                    </select>
-                  </Td>
-                </tr>
-              ))}
-              {shown.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    style={{
-                      padding: 48,
-                      textAlign: "center",
-                      color: "#94A3B8",
-                      fontSize: 14,
-                    }}
-                  >
-                    لا توجد طلبات
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+
+                    {/* ── Expanded details ── */}
+                    {open && (
+                      <div style={{ borderTop: "1px solid rgba(14,165,233,0.10)", padding: "16px 18px", background: "#FDFEFF" }}>
+                        {/* Delivery + note */}
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+                          <InfoBox icon={<MapPin size={14} color="#0284C7" />} title="عنوان التوصيل">
+                            {o.address || "—"}
+                          </InfoBox>
+                          {o.note && (
+                            <InfoBox icon={<StickyNote size={14} color="#B45309" />} title="ملاحظات التاجر">
+                              {o.note}
+                            </InfoBox>
+                          )}
+                          {o.coupon_code && (
+                            <InfoBox icon={<Tag size={14} color="#15803D" />} title="كود الخصم">
+                              <span dir="ltr">{o.coupon_code}</span> — خصم {o.discount.toFixed(2)} د.ل
+                            </InfoBox>
+                          )}
+                        </div>
+
+                        {/* Items table */}
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                          <thead>
+                            <tr style={{ background: "#F8FBFF", color: "#64748B", fontSize: 11 }}>
+                              <th style={thd}>المنتج</th>
+                              <th style={thd}>الوحدة</th>
+                              <th style={thd}>الكمية</th>
+                              <th style={thd}>سعر الوحدة</th>
+                              <th style={thd}>الإجمالي</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {o.items.map((it, i) => (
+                              <tr key={i} style={{ borderTop: "1px solid #F1F5F9" }}>
+                                <td style={tdd}>{it.product_name}</td>
+                                <td style={tdd}>{it.unit_label || "—"}</td>
+                                <td style={{ ...tdd, direction: "ltr", textAlign: "right" }}>{it.qty}</td>
+                                <td style={{ ...tdd, direction: "ltr", textAlign: "right" }}>{it.unit_price.toFixed(2)}</td>
+                                <td style={{ ...tdd, direction: "ltr", textAlign: "right", fontWeight: 800, color: "#0A1628" }}>{it.total.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            {o.discount > 0 && (
+                              <tr style={{ borderTop: "1px solid #F1F5F9" }}>
+                                <td colSpan={4} style={{ ...tdd, color: "#15803D", fontWeight: 700 }}>الخصم ({o.coupon_code})</td>
+                                <td style={{ ...tdd, direction: "ltr", textAlign: "right", color: "#15803D", fontWeight: 800 }}>-{o.discount.toFixed(2)}</td>
+                              </tr>
+                            )}
+                            <tr style={{ borderTop: "1.5px solid rgba(14,165,233,0.20)" }}>
+                              <td colSpan={4} style={{ ...tdd, fontWeight: 900, color: "#0A1628" }}>الإجمالي</td>
+                              <td style={{ ...tdd, direction: "ltr", textAlign: "right", fontWeight: 900, color: "#0EA5E9", fontSize: 14 }}>
+                                {o.total_amount.toFixed(2)} د.ل
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+const thd: React.CSSProperties = { padding: "8px 12px", textAlign: "right", fontWeight: 800 };
+const tdd: React.CSSProperties = { padding: "8px 12px", textAlign: "right", color: "#334155" };
+
+function InfoBox({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      flex: 1, minWidth: 220,
+      background: "#fff", borderRadius: 10, padding: "10px 14px",
+      border: "1px solid rgba(14,165,233,0.12)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 800, color: "#64748B", marginBottom: 4 }}>
+        {icon} {title}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#0A1628", lineHeight: 1.6 }}>
+        {children}
       </div>
     </div>
   );
@@ -376,132 +397,29 @@ function formatDate(iso?: string): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return iso;
   }
 }
 
-function Th({
-  children,
-  width,
-  center,
-}: {
-  children: React.ReactNode;
-  width?: number;
-  center?: boolean;
-}) {
-  return (
-    <th
-      style={{
-        padding: "12px 16px",
-        textAlign: center ? "center" : "right",
-        fontSize: 12,
-        fontWeight: 700,
-        color: "#64748B",
-        letterSpacing: ".04em",
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
-        width,
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, center }: { children: React.ReactNode; center?: boolean }) {
-  return (
-    <td
-      style={{
-        padding: "12px 16px",
-        textAlign: center ? "center" : "right",
-        color: "#334155",
-        verticalAlign: "middle",
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
 function OrderStatusBadge({ status }: { status: string }) {
-  const map: Record<
-    string,
-    { bg: string; color: string; border: string; dot: string; label: string }
-  > = {
-    pending: {
-      bg: "#FEF3C7",
-      color: "#B45309",
-      border: "rgba(245,158,11,.3)",
-      dot: "#F59E0B",
-      label: "قيد الانتظار",
-    },
-    confirmed: {
-      bg: "#E0F2FE",
-      color: "#0284C7",
-      border: "rgba(14,165,233,.3)",
-      dot: "#0EA5E9",
-      label: "مؤكد",
-    },
-    shipped: {
-      bg: "#F5F3FF",
-      color: "#6D28D9",
-      border: "#DDD6FE",
-      dot: "#7C3AED",
-      label: "تم الشحن",
-    },
-    delivered: {
-      bg: "#DCFCE7",
-      color: "#15803D",
-      border: "rgba(34,197,94,.3)",
-      dot: "#22C55E",
-      label: "تم التسليم",
-    },
-    cancelled: {
-      bg: "#FEE2E2",
-      color: "#B91C1C",
-      border: "rgba(239,68,68,.3)",
-      dot: "#EF4444",
-      label: "ملغي",
-    },
+  const map: Record<string, { bg: string; color: string; border: string; dot: string; label: string }> = {
+    pending:   { bg: "#FEF3C7", color: "#B45309", border: "rgba(245,158,11,.3)", dot: "#F59E0B", label: "قيد الانتظار" },
+    confirmed: { bg: "#E0F2FE", color: "#0284C7", border: "rgba(14,165,233,.3)", dot: "#0EA5E9", label: "مؤكد" },
+    shipped:   { bg: "#F5F3FF", color: "#6D28D9", border: "#DDD6FE",             dot: "#7C3AED", label: "تم الشحن" },
+    delivered: { bg: "#DCFCE7", color: "#15803D", border: "rgba(34,197,94,.3)",  dot: "#22C55E", label: "تم التسليم" },
+    cancelled: { bg: "#FEE2E2", color: "#B91C1C", border: "rgba(239,68,68,.3)",  dot: "#EF4444", label: "ملغي" },
   };
-  const s = map[status] ?? {
-    bg: "#F1F5F9",
-    color: "#475569",
-    border: "#E2E8F0",
-    dot: "#94A3B8",
-    label: status,
-  };
+  const s = map[status] ?? { bg: "#F1F5F9", color: "#475569", border: "#E2E8F0", dot: "#94A3B8", label: status };
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        padding: "3px 10px",
-        borderRadius: 9999,
-        background: s.bg,
-        color: s.color,
-        border: `1.5px solid ${s.border}`,
-        fontSize: 12,
-        fontWeight: 700,
-        whiteSpace: "nowrap",
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: s.dot,
-          flexShrink: 0,
-        }}
-      />
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "3px 10px", borderRadius: 9999,
+      background: s.bg, color: s.color, border: `1.5px solid ${s.border}`,
+      fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
       {s.label}
     </span>
   );

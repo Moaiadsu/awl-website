@@ -69,6 +69,13 @@ function normMerchant(m: any) {
   };
 }
 
+const PAYMENT_METHOD: Record<string, string> = {
+  PAYMENT_METHOD_COD:   "cod",
+  PAYMENT_METHOD_SADAD: "sadad",
+  PAYMENT_METHOD_CHECK: "check",
+  "1": "cod", "2": "sadad", "3": "check",
+};
+
 function normOrder(o: any) {
   return {
     id:           o.id,
@@ -79,12 +86,16 @@ function normOrder(o: any) {
     note:         o.note         ?? "",
     created_at:   o.createdAt    ?? o.created_at    ?? "",
     updated_at:   o.updatedAt    ?? o.updated_at    ?? "",
+    coupon_code:  o.couponCode   ?? o.coupon_code   ?? "",
+    discount:     o.discount     ?? 0,
+    payment_method: PAYMENT_METHOD[String(o.paymentMethod ?? o.payment_method ?? "")] ?? "",
     items:        (o.items ?? []).map((it: any) => ({
       product_id:   it.productId   ?? it.product_id,
       product_name: it.productName ?? it.product_name ?? "",
       qty:          it.qty         ?? 0,
       unit_price:   it.unitPrice   ?? it.unit_price   ?? 0,
       total:        it.total       ?? 0,
+      unit_label:   it.unitLabel   ?? it.unit_label   ?? "",
     })),
   };
 }
@@ -198,6 +209,123 @@ export const updateOrderStatus = (orderId: string, status: string) => {
 };
 
 // ── Products (ProductService) ─────────────────────────────────────────────────
+// ── OTP delivery log ──────────────────────────────────────────────────────────
+
+export type OtpLogRow = {
+  id: string;
+  phone: string;
+  provider: string; // "resala" | "local"
+  env: string;      // "test" | "live"
+  event: string;    // "sent" | "send_failed" | "verified" | "verify_failed"
+  detail: string;
+  created_at: string;
+};
+
+export const getOtpLogs = (): Promise<OtpLogRow[]> =>
+  rpc<{ logs: any[] }>("awl.v1.AuthService", "ListOtpLogs", {})
+    .then((r) => (r.logs ?? []).map((l: any) => ({
+      id: l.id, phone: l.phone ?? "", provider: l.provider ?? "",
+      env: l.env ?? "", event: l.event ?? "", detail: l.detail ?? "",
+      created_at: l.createdAt ?? "",
+    })));
+
+// ── Market index (weighted product basket) ────────────────────────────────────
+
+export type IndexComponentRow = {
+  product_id: string;
+  weight: number;
+  product_name: string;
+  price: number;        // catalog (old) price
+  manual_price: number; // admin-entered market price
+};
+
+export const getMarketIndexConfig = () =>
+  rpc<{ components?: any[]; currentValue?: number }>(
+    "awl.v1.ProductService", "GetMarketIndexConfig", {},
+  ).then((r) => ({
+    components: (r.components ?? []).map((c: any) => ({
+      product_id: c.productId ?? "",
+      weight: c.weight ?? 1,
+      product_name: c.productName ?? "",
+      price: c.price ?? 0,
+      manual_price: c.manualPrice ?? 0,
+    })) as IndexComponentRow[],
+    current_value: r.currentValue ?? 0,
+  }));
+
+export const setMarketIndex = (
+  components: { product_id: string; weight: number; manual_price: number }[],
+) =>
+  rpc<{ value?: number }>("awl.v1.ProductService", "SetMarketIndex", {
+    components: components.map((c) => ({
+      productId: c.product_id,
+      weight: c.weight,
+      manualPrice: c.manual_price,
+    })),
+  });
+
+export const getMarketIndexHistory = () =>
+  rpc<{ value?: number; previousValue?: number; updatedAt?: string; history?: any[] }>(
+    "awl.v1.ProductService", "GetMarketIndex", {},
+  ).then((r) => ({
+    value: r.value ?? 0,
+    previous_value: r.previousValue ?? 0,
+    updated_at: r.updatedAt ?? "",
+    history: (r.history ?? []).map((h: any) => ({
+      value: h.value ?? 0,
+      created_at: h.createdAt ?? "",
+    })),
+  }));
+
+// ── Payments (buyer settlements awaiting confirmation) ────────────────────────
+
+export type PaymentRow = {
+  id: string;
+  user_id: string;
+  order_id: string;
+  method: "cod" | "sadad" | "check" | "";
+  reference: string;
+  image_url: string;
+  amount: number;
+  status: "pending" | "confirmed" | "rejected" | "";
+  created_at: string;
+  store_name: string;
+};
+
+function normPayment(p: any): PaymentRow {
+  const method =
+    p.method === "PAYMENT_METHOD_COD" ? "cod"
+    : p.method === "PAYMENT_METHOD_SADAD" ? "sadad"
+    : p.method === "PAYMENT_METHOD_CHECK" ? "check" : "";
+  const status =
+    p.status === "PAYMENT_STATUS_PENDING" ? "pending"
+    : p.status === "PAYMENT_STATUS_CONFIRMED" ? "confirmed"
+    : p.status === "PAYMENT_STATUS_REJECTED" ? "rejected" : "";
+  return {
+    id: p.id, user_id: p.userId ?? "", order_id: p.orderId ?? "",
+    method, reference: p.reference ?? "", image_url: p.imageUrl ?? "",
+    amount: p.amount ?? 0, status, created_at: p.createdAt ?? "",
+    store_name: p.storeName ?? "",
+  };
+}
+
+export const getPayments = (status?: "pending" | "confirmed" | "rejected") =>
+  rpc<{ payments: any[] }>("awl.v1.OrderService", "ListPayments", {
+    statusFilter:
+      status === "pending" ? "PAYMENT_STATUS_PENDING"
+      : status === "confirmed" ? "PAYMENT_STATUS_CONFIRMED"
+      : status === "rejected" ? "PAYMENT_STATUS_REJECTED"
+      : "PAYMENT_STATUS_UNSPECIFIED",
+  }).then((r) => (r.payments ?? []).map(normPayment));
+
+export const confirmPayment = (paymentId: string, amount: number) =>
+  rpc<any>("awl.v1.OrderService", "ConfirmPayment", { paymentId, amount })
+    .then(normPayment);
+
+export const rejectPayment = (paymentId: string) =>
+  rpc<any>("awl.v1.OrderService", "RejectPayment", { paymentId })
+    .then(normPayment);
+
 // Variants are imported from Odoo only (admin sync) — every sync fully
 // overwrites the catalog, so there is deliberately no API here to create or
 // edit them: the dashboard can never hold variant data that Odoo doesn't have.
