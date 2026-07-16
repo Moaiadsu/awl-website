@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { getMerchants, updateMerchantStatus, createOdooContact, deleteMerchantEverywhere } from "@/lib/api";
+import { getMerchants, updateMerchantStatus, updateMerchantTier, createOdooContact, deleteMerchantEverywhere } from "@/lib/api";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import {
   Check,
   X,
@@ -18,8 +19,11 @@ import {
   MapPin,
   ChevronDown,
   ChevronUp,
+  Award,
   type LucideIcon,
 } from "lucide-react";
+
+type MerchantTier = "none" | "bronze" | "silver" | "gold" | "platinum";
 
 type Merchant = {
   id: string;
@@ -28,6 +32,7 @@ type Merchant = {
   city: string;
   phone: string;
   status: string;
+  tier: MerchantTier;
 };
 
 type FilterKey = "all" | "pending" | "approved" | "rejected";
@@ -104,6 +109,11 @@ export default function MerchantsPage() {
 
   const handle = async (id: string, status: "approved" | "rejected" | "pending") => {
     await updateMerchantStatus(id, status);
+    load();
+  };
+
+  const handleTier = async (id: string, tier: MerchantTier) => {
+    await updateMerchantTier(id, tier);
     load();
   };
 
@@ -388,14 +398,7 @@ export default function MerchantsPage() {
       </div>
 
       {/* ── CARD LIST ─────────────────────────────────── */}
-      {loading && shown.length === 0 && (
-        <div style={{ textAlign: "center", padding: "72px 20px" }}>
-          <div style={{ width: 72, height: 72, borderRadius: 20, background: "rgba(14,165,233,0.07)", border: "1.5px solid rgba(14,165,233,0.14)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-            <Users size={36} color="#0EA5E9" style={{ opacity: 0.55 }} />
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#1E293B", marginBottom: 8 }}>جاري تحميل البيانات...</div>
-        </div>
-      )}
+      {loading && shown.length === 0 && <SkeletonRows count={6} />}
       {!loading && shown.length === 0 && (
         <div style={{ textAlign: "center", padding: "72px 20px" }}>
           <div style={{ width: 72, height: 72, borderRadius: 20, background: "rgba(14,165,233,0.07)", border: "1.5px solid rgba(14,165,233,0.14)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
@@ -413,6 +416,7 @@ export default function MerchantsPage() {
               merchant={m}
               odooState={odooState.get(m.id) ?? "idle"}
               onAction={(id, status) => handle(id, status)}
+              onTierChange={(id, tier) => handleTier(id, tier)}
               onAddToOdoo={() => addToOdoo(m)}
               onDelete={() => removeMerchant(m)}
             />
@@ -430,12 +434,14 @@ function MerchantCard({
   merchant: m,
   odooState,
   onAction,
+  onTierChange,
   onAddToOdoo,
   onDelete,
 }: {
   merchant: Merchant;
   odooState: "idle" | "loading" | "done" | "error";
   onAction: (id: string, status: "approved" | "rejected" | "pending") => void;
+  onTierChange: (id: string, tier: MerchantTier) => void;
   onAddToOdoo: () => void;
   onDelete: () => void;
 }) {
@@ -467,6 +473,7 @@ function MerchantCard({
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 5 }}>
             <span style={{ fontSize: 14, fontWeight: 800, color: "#0A1628" }}>{m.store_name}</span>
             <StatusBadge status={m.status} />
+            <TierBadge tier={m.tier} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             {m.owner_name && (
@@ -504,6 +511,7 @@ function MerchantCard({
             {m.status !== "rejected" && <RowAction icon={X} label="رفض" color="#B91C1C" hoverBg="#FEE2E2" onClick={() => onAction(m.id, "rejected")} />}
             {m.status !== "pending" && <RowAction icon={RotateCcw} label="إعادة للانتظار" color="#B45309" hoverBg="#FEF3C7" onClick={() => onAction(m.id, "pending")} />}
             <OdooButton state={odooState} onClick={onAddToOdoo} />
+            <TierSelect tier={m.tier} onChange={(tier) => onTierChange(m.id, tier)} />
             <div style={{ flex: 1 }} />
             <RowAction icon={Trash2} label="حذف نهائي" color="#B91C1C" hoverBg="#FEE2E2" onClick={onDelete} />
           </div>
@@ -738,5 +746,81 @@ function StatusBadge({ status }: { status: string }) {
       />
       {s.label}
     </span>
+  );
+}
+
+const TIER_META: Record<MerchantTier, { bg: string; color: string; border: string; label: string }> = {
+  none:     { bg: "#F1F5F9", color: "#94A3B8", border: "#E2E8F0",        label: "بدون عضوية" },
+  bronze:   { bg: "#FDE9D9", color: "#B45309", border: "rgba(180,83,9,.3)",   label: "برونزية" },
+  silver:   { bg: "#F1F5F9", color: "#475569", border: "rgba(71,85,105,.3)",  label: "فضية" },
+  gold:     { bg: "#FEF9C3", color: "#CA8A04", border: "rgba(202,138,4,.3)",  label: "ذهبية" },
+  platinum: { bg: "#F3E8FF", color: "#7C3AED", border: "rgba(124,58,237,.3)", label: "بلاتينية" },
+};
+
+function TierBadge({ tier }: { tier: MerchantTier }) {
+  if (tier === "none") return null;
+  const t = TIER_META[tier];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "3px 10px",
+        borderRadius: 9999,
+        background: t.bg,
+        color: t.color,
+        border: `1.5px solid ${t.border}`,
+        fontSize: 12,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Award size={11} />
+      {t.label}
+    </span>
+  );
+}
+
+function TierSelect({ tier, onChange }: { tier: MerchantTier; onChange: (tier: MerchantTier) => void }) {
+  return (
+    <label
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 10px",
+        borderRadius: 8,
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#475569",
+        background: "#fff",
+        border: "1.5px solid #E2E8F0",
+        fontFamily: "Cairo, sans-serif",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Award size={12} color="#94A3B8" />
+      <select
+        value={tier}
+        onChange={(e) => onChange(e.target.value as MerchantTier)}
+        style={{
+          border: "none",
+          background: "transparent",
+          fontFamily: "Cairo, sans-serif",
+          fontSize: 12,
+          fontWeight: 700,
+          color: "#0A1628",
+          outline: "none",
+          cursor: "pointer",
+        }}
+      >
+        {(Object.keys(TIER_META) as MerchantTier[]).map((key) => (
+          <option key={key} value={key}>
+            {TIER_META[key].label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

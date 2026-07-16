@@ -18,6 +18,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+@keyframes awl-spin { to { transform: rotate(360deg); } }
+@keyframes awl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
 body {
   font-family: 'Cairo', sans-serif;
   background-color: #ECEEF3;

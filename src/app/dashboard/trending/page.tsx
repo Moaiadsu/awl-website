@@ -8,6 +8,7 @@ import {
 import {
   TrendingUp, TrendingDown, Package, Tag, X, Percent,
 } from "lucide-react";
+import { SkeletonCards } from "@/components/ui/Skeleton";
 
 type Product = {
   id: string;
@@ -36,13 +37,16 @@ export default function TrendingOffersPage() {
   const [products, setProducts]     = useState<Product[]>([]);
   const [trendMap, setTrendMap]     = useState<Map<string, number>>(new Map());
   const [offersMap, setOffersMap]   = useState<Map<string, number>>(new Map());
-  const tab: Tab = "offers"; // trending products were replaced by the market index
+  const [tab, setTab]               = useState<Tab>("offers");
   const [search, setSearch]         = useState("");
+  const [loading, setLoading]       = useState(true);
 
   const reload = () => {
-    getProducts().then(setProducts).catch(() => {});
-    getTrending().then(setTrendMap).catch(() => {});
-    getOffers().then(setOffersMap).catch(() => {});
+    Promise.allSettled([
+      getProducts().then(setProducts),
+      getTrending().then(setTrendMap),
+      getOffers().then(setOffersMap),
+    ]).then(() => setLoading(false));
   };
 
   useEffect(() => { reload(); }, []);
@@ -119,21 +123,48 @@ export default function TrendingOffersPage() {
           </div>
           <div>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#0A1628", letterSpacing: "-.02em", lineHeight: 1.2 }}>
-              العروض
+              الرائج والعروض
             </h1>
             <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 5 }}>
-              إدارة العروض الخاصة — مؤشر السوق يُدار من صفحته المستقلة
+              إدارة المنتجات الرائجة والعروض الخاصة — مؤشر السوق يُدار من صفحته المستقلة
             </div>
           </div>
         </div>
 
         {/* Stat badges */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, background: "rgba(14,165,233,0.08)", color: "#0284C7", border: "1px solid rgba(14,165,233,0.20)", padding: "4px 12px", borderRadius: 9999 }}>
+            <TrendingUp size={11} style={{ verticalAlign: "middle", marginLeft: 4 }} />
+            {trendMap.size} رائج
+          </span>
           <span style={{ fontSize: 12, fontWeight: 700, background: "rgba(249,115,22,0.08)", color: "#9A3412", border: "1px solid rgba(249,115,22,0.20)", padding: "4px 12px", borderRadius: 9999 }}>
             <Percent size={11} style={{ verticalAlign: "middle", marginLeft: 4 }} />
             {offersMap.size} عرض
           </span>
         </div>
+      </div>
+
+      {/* ── TAB SWITCHER ─────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {([["trending", "الرائج", TrendingUp], ["offers", "العروض", Percent]] as const).map(
+          ([key, label, Icon]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                fontSize: 13, fontWeight: 800, padding: "9px 18px",
+                borderRadius: 9999, cursor: "pointer", fontFamily: "Cairo, sans-serif",
+                background: tab === key ? "#0EA5E9" : "#F0F9FF",
+                color: tab === key ? "#fff" : "#0284C7",
+                border: `1.5px solid ${tab === key ? "#0EA5E9" : "rgba(14,165,233,0.20)"}`,
+              }}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ),
+        )}
       </div>
 
       {/* ── SEARCH ─────────────────────────────────── */}
@@ -163,22 +194,34 @@ export default function TrendingOffersPage() {
       </div>
 
       {/* ── CARD GRID ─────────────────────────────────── */}
-      {shown.length === 0 ? (
+      {loading ? (
+        <SkeletonCards count={8} />
+      ) : shown.length === 0 ? (
         <div style={{ textAlign: "center", padding: 80, color: "#CBD5E1" }}>
           <Package size={48} style={{ margin: "0 auto 16px", opacity: 0.2 }} />
           <div style={{ fontSize: 15, fontWeight: 700, color: "#94A3B8" }}>لا توجد منتجات</div>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-          {shown.map((p) => (
-            <OfferCard
-              key={p.id}
-              product={p}
-              percent={offersMap.get(p.id)}
-              onSet={() => onSetOffer(p)}
-              onRemove={() => onRemoveOffer(p)}
-            />
-          ))}
+          {shown.map((p) =>
+            tab === "trending" ? (
+              <TrendingCard
+                key={p.id}
+                product={p}
+                percent={trendMap.get(p.id)}
+                onSet={() => onSetTrending(p)}
+                onRemove={() => onRemoveTrending(p)}
+              />
+            ) : (
+              <OfferCard
+                key={p.id}
+                product={p}
+                percent={offersMap.get(p.id)}
+                onSet={() => onSetOffer(p)}
+                onRemove={() => onRemoveOffer(p)}
+              />
+            ),
+          )}
         </div>
       )}
     </div>

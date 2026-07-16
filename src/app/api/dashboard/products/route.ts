@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { fetchOdooProducts, fetchOdooVariantsByTemplate } from "@/lib/odoo";
+import { fetchOdooProducts, fetchOdooVariantsByTemplate, fetchOdooPackagingsByTemplate } from "@/lib/odoo";
 
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8080";
 
@@ -58,6 +58,15 @@ export async function POST() {
       return new Map<number, never[]>();
     });
 
+    // Resolve each template's sellable pack sizes (Odoo's product.packaging,
+    // e.g. "Set of 1" / "Box of 12"). Sync still succeeds without them.
+    const packagingsByTemplate = await fetchOdooPackagingsByTemplate(
+      fresh.map((p) => p.id),
+    ).catch((e) => {
+      console.error("[odoo/products] packaging fetch error", e);
+      return new Map<number, never[]>();
+    });
+
     const slim = fresh.map((p) => ({
       id: p.id,
       name: p.name,
@@ -75,6 +84,12 @@ export async function POST() {
         barcode: v.barcode,
         // data URI so no extra fetch is needed; empty = use the product image
         image_url: v.image ? `data:image/png;base64,${v.image}` : "",
+      })),
+      packagings: (packagingsByTemplate.get(p.id) ?? []).map((pk) => ({
+        id: `odoo-pack-${pk.id}`,
+        name: pk.name,
+        name_ar: pk.name, // Odoo carries one name; Arabic falls back to it
+        qty: pk.qty,
       })),
     }));
 

@@ -512,3 +512,77 @@ export async function fetchOdooVariantsByTemplate(
 
   return byTemplate;
 }
+
+// ── Product packaging ─────────────────────────────────────────────────────────
+//
+// Odoo's product.packaging model holds sellable pack sizes for a SKU — e.g.
+// name="Set of 1" qty=1, name="Box of 12" qty=12. It has no product_tmpl_id
+// of its own (it hangs off product.product), so packaging records are
+// resolved to their template in a second lookup, the same two-step shape as
+// fetchOdooVariantsByTemplate.
+
+export type OdooPackaging = {
+  id: number;
+  templateId: number;
+  name: string;
+  qty: number;
+};
+
+type RawPackaging = {
+  id: number;
+  name: string;
+  qty: number;
+  product_id: [number, string] | false;
+};
+
+/// Fetches all product.packaging rows for the given templates. Returns an
+/// empty map (rather than throwing) if the Inventory "Packaging" feature is
+/// disabled in Odoo, since that's a normal, expected config — not a sync error.
+export async function fetchOdooPackagingsByTemplate(
+  templateIds: number[],
+): Promise<Map<number, OdooPackaging[]>> {
+  const byTemplate = new Map<number, OdooPackaging[]>();
+  if (templateIds.length === 0) return byTemplate;
+
+  let raw: RawPackaging[];
+  try {
+    raw = await callKw<RawPackaging[]>(
+      "product.packaging",
+      "search_read",
+      [[["product_id.product_tmpl_id", "in", templateIds], ["active", "=", true]]],
+      { fields: ["id", "name", "qty", "product_id"], limit: 5000, context: langCtx },
+    );
+  } catch {
+    return byTemplate;
+  }
+  if (raw.length === 0) return byTemplate;
+
+  // Resolve each packaging's SKU (product_id) to its parent template.
+  const skuIds = Array.from(
+    new Set(raw.map((p) => (p.product_id ? p.product_id[0] : null)).filter((id): id is number => id !== null)),
+  );
+  const templateOfSku = new Map<number, number>();
+  for (let i = 0; i < skuIds.length; i += 200) {
+    const chunk = await callKw<Array<{ id: number; product_tmpl_id: [number, string] | false }>>(
+      "product.product",
+      "read",
+      [skuIds.slice(i, i + 200)],
+      { fields: ["id", "product_tmpl_id"] },
+    );
+    for (const c of chunk) {
+      if (c.product_tmpl_id) templateOfSku.set(c.id, c.product_tmpl_id[0]);
+    }
+  }
+
+  for (const p of raw) {
+    if (!p.product_id) continue;
+    const tid = templateOfSku.get(p.product_id[0]);
+    if (tid === undefined) continue;
+    const list = byTemplate.get(tid) ?? [];
+    list.push({ id: p.id, templateId: tid, name: p.name, qty: Math.max(1, Math.round(p.qty)) });
+    byTemplate.set(tid, list);
+  }
+  byTemplate.forEach((list) => list.sort((a, b) => a.qty - b.qty));
+
+  return byTemplate;
+}

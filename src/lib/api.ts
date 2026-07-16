@@ -57,6 +57,16 @@ const ORDER_STATUS: Record<string, string> = {
   "5":                            "cancelled",
 };
 
+// Proto enum → plain string for MembershipTier
+const MEMBERSHIP_TIER: Record<string, string> = {
+  MEMBERSHIP_TIER_UNSPECIFIED: "none",
+  MEMBERSHIP_TIER_BRONZE:      "bronze",
+  MEMBERSHIP_TIER_SILVER:      "silver",
+  MEMBERSHIP_TIER_GOLD:        "gold",
+  MEMBERSHIP_TIER_PLATINUM:    "platinum",
+  "0": "none", "1": "bronze", "2": "silver", "3": "gold", "4": "platinum",
+};
+
 function normMerchant(m: any) {
   return {
     id:         m.id,
@@ -65,6 +75,7 @@ function normMerchant(m: any) {
     city:       m.city       ?? "",
     phone:      m.phone      ?? "",
     status:     USER_STATUS[String(m.status)] ?? m.status ?? "pending",
+    tier:       (MEMBERSHIP_TIER[String(m.membershipTier ?? m.membership_tier ?? "0")] ?? "none") as any,
     created_at: m.createdAt  ?? m.created_at  ?? "",
   };
 }
@@ -138,6 +149,17 @@ export const updateMerchantStatus = (
   return rpc("awl.v1.UserService", "UpdateMerchantStatus", {
     merchantId,
     status: statusMap[status] ?? 1,
+  });
+};
+
+export const updateMerchantTier = (
+  merchantId: string,
+  tier: "none" | "bronze" | "silver" | "gold" | "platinum",
+) => {
+  const tierMap: Record<string, number> = { none: 0, bronze: 1, silver: 2, gold: 3, platinum: 4 };
+  return rpc("awl.v1.UserService", "UpdateMerchantTier", {
+    merchantId,
+    tier: tierMap[tier] ?? 0,
   });
 };
 

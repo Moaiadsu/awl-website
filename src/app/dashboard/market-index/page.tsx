@@ -6,6 +6,7 @@ import {
 import {
   LineChart, Search, Trash2, CheckCircle2, TrendingUp, TrendingDown, Check,
 } from "lucide-react";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 
 // Basket weights: quarter steps from 0.25 to 3.0 (validated server-side too).
 const WEIGHTS = Array.from({ length: 12 }, (_, i) => (i + 1) * 0.25);
@@ -26,11 +27,12 @@ export default function MarketIndexPage() {
   const [saving, setSaving] = useState(false);
   const [savedValue, setSavedValue] = useState<number | null>(null);
   const [history, setHistory] = useState<{ value: number; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const load = () => {
-    getProducts().then(setProducts).catch(() => {});
-    getMarketIndexConfig()
-      .then((cfg) => {
+    Promise.allSettled([
+      getProducts().then(setProducts),
+      getMarketIndexConfig().then((cfg) => {
         setRows(cfg.components.map((c) => ({
           product_id: c.product_id,
           name: c.product_name,
@@ -39,9 +41,9 @@ export default function MarketIndexPage() {
           weight: c.weight,
         })));
         setSavedValue(cfg.current_value || null);
-      })
-      .catch(() => {});
-    getMarketIndexHistory().then((h) => setHistory([...h.history].reverse())).catch(() => {});
+      }),
+      getMarketIndexHistory().then((h) => setHistory([...h.history].reverse())),
+    ]).then(() => setLoading(false));
   };
   useEffect(load, []);
 
@@ -148,7 +150,9 @@ export default function MarketIndexPage() {
           سلة المؤشر ({rows.length})
         </div>
 
-        {rows.length === 0 ? (
+        {loading ? (
+          <SkeletonRows count={3} />
+        ) : rows.length === 0 ? (
           <div style={{ textAlign: "center", padding: 26, color: "#94A3B8", fontSize: 13 }}>
             لم تُختَر منتجات بعد — اضغط على المنتجات في القائمة بالأسفل لإضافتها
           </div>
@@ -315,7 +319,10 @@ export default function MarketIndexPage() {
               </div>
             );
           })}
-          {pickList.length === 0 && (
+          {loading && (
+            <div style={{ gridColumn: "1 / -1" }}><SkeletonRows count={3} /></div>
+          )}
+          {!loading && pickList.length === 0 && (
             <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: 30, color: "#94A3B8", fontSize: 13 }}>
               لا توجد منتجات مطابقة
             </div>

@@ -5,6 +5,7 @@ import {
   Archive, ChevronDown, ChevronUp, Tag, Layers,
 } from "lucide-react";
 import { type OdooProductRow, syncOdooProducts } from "@/lib/api";
+import { SkeletonCards } from "@/components/ui/Skeleton";
 
 const TYPE_LABEL: Record<string, string> = {
   product: "بضاعة",
@@ -166,9 +167,7 @@ export default function OdooProductsPage() {
       {/* CONTENT */}
       {error && <ErrorBanner message={error} />}
 
-      {syncing && products.length === 0 && (
-        <div style={{ padding: 80 }}><Spinner label="جاري المزامنة..." /></div>
-      )}
+      {syncing && products.length === 0 && <SkeletonCards count={8} />}
 
       {!syncing && !error && shown.length === 0 && (
         <EmptyState
@@ -546,11 +545,3 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-function Spinner({ label }: { label: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-      <div style={{ width: 28, height: 28, border: "3px solid #F1F5F9", borderTopColor: "#0EA5E9", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-      <span style={{ fontSize: 13, color: "#CBD5E1" }}>{label}</span>
-    </div>
-  );
-}

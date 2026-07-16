@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAllOrders, updateOrderStatus, getMerchants } from "@/lib/api";
 import PaymentsPanel from "@/components/PaymentsPanel";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import {
   Search, ShoppingBag, Wallet, ChevronDown, ChevronUp,
   MapPin, StickyNote, Tag, Banknote, Smartphone, Receipt, Phone,
@@ -51,7 +52,7 @@ const FILTER_LABELS: Record<string, string> = { all: "الكل", ...STATUS_LABEL
 const PM_LABEL: Record<string, { label: string; icon: React.ReactNode }> = {
   cod:   { label: "الدفع عند الاستلام", icon: <Banknote size={12} /> },
   sadad: { label: "سداد",              icon: <Smartphone size={12} /> },
-  check: { label: "صك مصرفي",          icon: <Receipt size={12} /> },
+  check: { label: "تحويل مصرفي",        icon: <Receipt size={12} /> },
 };
 
 export default function OrdersPage() {
@@ -61,12 +62,21 @@ export default function OrdersPage() {
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const load = () => {
+    Promise.allSettled([
+      getAllOrders().then(setOrders),
+      getMerchants().then((ms: any[]) =>
+        setMerchants(new Map(ms.map((m) => [m.id, m as Merchant])))),
+    ]).then(() => setLoading(false));
+  };
+  // Refresh after a status change without re-showing the skeleton — only the
+  // very first load should look like a fresh page.
+  const refresh = () => {
     getAllOrders().then(setOrders).catch(() => {});
     getMerchants()
-      .then((ms: any[]) =>
-        setMerchants(new Map(ms.map((m) => [m.id, m as Merchant]))))
+      .then((ms: any[]) => setMerchants(new Map(ms.map((m) => [m.id, m as Merchant]))))
       .catch(() => {});
   };
 
@@ -74,7 +84,7 @@ export default function OrdersPage() {
 
   const handle = async (id: string, status: string) => {
     await updateOrderStatus(id, status);
-    load();
+    refresh();
   };
 
   const counts = useMemo(() => {
@@ -215,7 +225,9 @@ export default function OrdersPage() {
           </div>
 
           {/* ── ORDERS LIST (expandable cards) ─────────────── */}
-          {shown.length === 0 ? (
+          {loading ? (
+            <SkeletonRows count={6} />
+          ) : shown.length === 0 ? (
             <div style={{ textAlign: "center", padding: 60, color: "#94A3B8", fontSize: 14 }}>
               لا توجد طلبات
             </div>

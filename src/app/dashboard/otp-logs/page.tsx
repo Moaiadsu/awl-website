@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { getOtpLogs, type OtpLogRow } from "@/lib/api";
 import { MessageSquareText, RefreshCw, CheckCircle2, XCircle, Send, AlertTriangle } from "lucide-react";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 
 const EVENT_STYLE: Record<string, { bg: string; fg: string; label: string; icon: React.ReactNode }> = {
   sent:          { bg: "#E0F2FE", fg: "#0284C7", label: "أُرسل",        icon: <Send size={12} /> },
@@ -12,7 +13,7 @@ const EVENT_STYLE: Record<string, { bg: string; fg: string; label: string; icon:
 
 export default function OtpLogsPage() {
   const [logs, setLogs] = useState<OtpLogRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
@@ -58,7 +59,9 @@ export default function OtpLogsPage() {
       </div>
 
       {/* ── Table ── */}
-      {logs.length === 0 ? (
+      {loading ? (
+        <SkeletonRows count={6} />
+      ) : logs.length === 0 ? (
         <div style={{ textAlign: "center", padding: 70, color: "#CBD5E1" }}>
           <MessageSquareText size={44} style={{ margin: "0 auto 14px", opacity: 0.25 }} />
           <div style={{ fontSize: 14, fontWeight: 700, color: "#94A3B8" }}>لا توجد سجلات بعد</div>

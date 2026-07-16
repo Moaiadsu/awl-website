@@ -4,11 +4,12 @@ import {
   getPayments, confirmPayment, rejectPayment, type PaymentRow,
 } from "@/lib/api";
 import { Wallet, CheckCircle2, XCircle, Receipt, Smartphone, Banknote } from "lucide-react";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 
 const METHOD_LABEL: Record<string, string> = {
   cod: "عند الاستلام",
   sadad: "سداد",
-  check: "صك مصرفي",
+  check: "تحويل مصرفي",
 };
 const METHOD_ICON: Record<string, React.ReactNode> = {
   cod: <Banknote size={14} />,
@@ -30,9 +31,11 @@ export default function PaymentsPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<string | null>(null);
+  const [imgState, setImgState] = useState<Record<string, "loading" | "loaded" | "error">>({});
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
-    getPayments().then(setPayments).catch(() => {});
+    getPayments().then(setPayments).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -104,7 +107,9 @@ export default function PaymentsPanel() {
       </div>
 
       {/* ── List ── */}
-      {shown.length === 0 ? (
+      {loading ? (
+        <SkeletonRows count={5} />
+      ) : shown.length === 0 ? (
         <div style={{ textAlign: "center", padding: 70, color: "#CBD5E1" }}>
           <Wallet size={44} style={{ margin: "0 auto 14px", opacity: 0.25 }} />
           <div style={{ fontSize: 14, fontWeight: 700, color: "#94A3B8" }}>لا توجد مدفوعات</div>
@@ -121,22 +126,46 @@ export default function PaymentsPanel() {
                 padding: "14px 18px",
                 display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
               }}>
-                {/* Check photo thumbnail (click to zoom) */}
+                {/* Transfer receipt thumbnail (click to zoom) */}
                 {p.image_url ? (
-                  <img
-                    src={p.image_url}
-                    alt="صورة الصك"
-                    onClick={() => setPreview(p.image_url)}
-                    style={{
-                      width: 72, height: 52, objectFit: "cover", borderRadius: 8,
-                      border: "1px solid rgba(14,165,233,0.20)", cursor: "zoom-in",
-                    }}
-                  />
+                  <div style={{ position: "relative", width: 72, height: 52, flexShrink: 0 }}>
+                    {imgState[p.id] !== "loaded" && (
+                      <div style={{
+                        position: "absolute", inset: 0, borderRadius: 8, background: "#F1F5F9",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: imgState[p.id] === "error" ? "#EF4444" : "#94A3B8",
+                      }}>
+                        {imgState[p.id] === "error" ? (
+                          <Receipt size={16} />
+                        ) : (
+                          <span style={{
+                            width: 16, height: 16, borderRadius: "50%",
+                            border: "2px solid rgba(14,165,233,0.25)", borderTopColor: "#0EA5E9",
+                            animation: "awl-spin 0.7s linear infinite",
+                          }} />
+                        )}
+                      </div>
+                    )}
+                    <img
+                      src={p.image_url}
+                      alt="صورة إيصال التحويل"
+                      onClick={() => imgState[p.id] === "loaded" && setPreview(p.image_url)}
+                      onLoad={() => setImgState((s) => ({ ...s, [p.id]: "loaded" }))}
+                      onError={() => setImgState((s) => ({ ...s, [p.id]: "error" }))}
+                      style={{
+                        width: 72, height: 52, objectFit: "cover", borderRadius: 8,
+                        border: "1px solid rgba(14,165,233,0.20)",
+                        cursor: imgState[p.id] === "loaded" ? "zoom-in" : "default",
+                        opacity: imgState[p.id] === "loaded" ? 1 : 0,
+                        position: imgState[p.id] === "loaded" ? "static" : "absolute",
+                      }}
+                    />
+                  </div>
                 ) : (
                   <div style={{
                     width: 72, height: 52, borderRadius: 8, background: "#F1F5F9",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "#94A3B8",
+                    color: "#94A3B8", flexShrink: 0,
                   }}>
                     {METHOD_ICON[p.method] ?? <Wallet size={16} />}
                   </div>

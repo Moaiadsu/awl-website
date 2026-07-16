@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getProducts } from "@/lib/api";
 import { Search, Tag, Package, TrendingUp, ShoppingCart, Archive, Layers } from "lucide-react";
+import { SkeletonCards } from "@/components/ui/Skeleton";
 
 type ProductVariant = {
   id: string;
@@ -40,9 +41,10 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [variantsOnly, setVariantsOnly] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getProducts().then(setProducts).catch(() => {});
+    getProducts().then(setProducts).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const variantCount = useMemo(
@@ -218,7 +220,9 @@ export default function ProductsPage() {
       </div>
 
       {/* ── CARD GRID ─────────────────────────────────── */}
-      {shown.length === 0 ? (
+      {loading ? (
+        <SkeletonCards count={8} />
+      ) : shown.length === 0 ? (
         <div style={{ textAlign: "center", padding: 80, color: "#CBD5E1" }}>
           <Package size={48} style={{ margin: "0 auto 16px", opacity: 0.2 }} />
           <div style={{ fontSize: 15, fontWeight: 700, color: "#94A3B8" }}>لا توجد منتجات</div>

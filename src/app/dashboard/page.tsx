@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { getMerchants, getAllOrders } from "@/lib/api";
+import { SkeletonStatCards, Skeleton } from "@/components/ui/Skeleton";
 import {
   Users,
   ShoppingBag,
@@ -23,10 +24,13 @@ type Merchant = {
 export default function DashboardPage() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    getMerchants().then(setMerchants).catch(() => {});
-    getAllOrders().then(setOrders).catch(() => {});
+    Promise.allSettled([
+      getMerchants().then(setMerchants),
+      getAllOrders().then(setOrders),
+    ]).then(() => setLoaded(true));
   }, []);
 
   const pending = merchants.filter((m) => m.status === "pending").length;
@@ -123,18 +127,24 @@ export default function DashboardPage() {
       </div>
 
       {/* ── STAT CARDS ─────────────────────────────────── */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        {stats.map((s) => (
-          <StatCard key={s.label} {...s} />
-        ))}
-      </div>
+      {!loaded ? (
+        <div style={{ marginBottom: 24 }}>
+          <SkeletonStatCards count={4} />
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 16,
+            marginBottom: 24,
+          }}
+        >
+          {stats.map((s) => (
+            <StatCard key={s.label} {...s} />
+          ))}
+        </div>
+      )}
 
       {/* ── RECENT MERCHANTS TABLE ──────────────────────── */}
       <div
@@ -175,7 +185,16 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {merchants.slice(0, 5).map((m) => (
+              {!loaded ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={4} style={{ padding: "12px 16px" }}>
+                      <Skeleton width="100%" height={16} />
+                    </td>
+                  </tr>
+                ))
+              ) : (
+              merchants.slice(0, 5).map((m) => (
                 <tr
                   key={m.id}
                   style={{ borderBottom: "1px solid rgba(14,165,233,0.05)", transition: "background .12s" }}
@@ -199,8 +218,9 @@ export default function DashboardPage() {
                     <StatusBadge status={m.status} />
                   </Td>
                 </tr>
-              ))}
-              {merchants.length === 0 && (
+              ))
+              )}
+              {loaded && merchants.length === 0 && (
                 <tr>
                   <td
                     colSpan={4}

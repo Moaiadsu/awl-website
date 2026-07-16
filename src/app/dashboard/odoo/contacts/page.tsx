@@ -12,6 +12,7 @@ import {
   createOdooContact,
   deleteOdooContact,
 } from "@/lib/api";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 
 const LANG_LABEL: Record<string, string> = {
   ar_001: "العربية",
@@ -273,9 +274,7 @@ export default function OdooContactsPage() {
       {/* CONTENT */}
       {error && <ErrorBanner message={error} />}
 
-      {syncing && contacts.length === 0 && (
-        <div style={{ padding: 80 }}><Spinner label="جاري المزامنة..." /></div>
-      )}
+      {syncing && contacts.length === 0 && <SkeletonRows count={6} />}
 
       {!syncing && !error && shown.length === 0 && (
         <EmptyState
@@ -616,15 +615,6 @@ function ErrorBanner({ message }: { message: string }) {
       <div style={{ width: 48, height: 48, borderRadius: 14, background: "#FEE2E2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>⚠</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: "#B91C1C" }}>خطأ في الاتصال</div>
       <div style={{ fontSize: 12, color: "#94A3B8", maxWidth: 400 }}>{message}</div>
-    </div>
-  );
-}
-
-function Spinner({ label }: { label: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-      <div style={{ width: 28, height: 28, border: "3px solid #F1F5F9", borderTopColor: "#0EA5E9", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-      <span style={{ fontSize: 13, color: "#CBD5E1" }}>{label}</span>
     </div>
   );
 }
