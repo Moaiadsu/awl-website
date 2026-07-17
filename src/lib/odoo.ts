@@ -515,11 +515,24 @@ export async function fetchOdooVariantsByTemplate(
 
 // ── Product packaging ─────────────────────────────────────────────────────────
 //
-// Odoo's product.packaging model holds sellable pack sizes for a SKU — e.g.
-// name="Set of 1" qty=1, name="Box of 12" qty=12. It has no product_tmpl_id
-// of its own (it hangs off product.product), so packaging records are
-// resolved to their template in a second lookup, the same two-step shape as
-// fetchOdooVariantsByTemplate.
+// This Odoo instance has no `product.packaging` model — that model was
+// retired in favor of representing pack sizes as extra Units of Measure.
+// A template's sellable pack sizes live in `product.template.uom_ids`
+// (many2many → uom.uom), set from the product form's Sales tab
+// ("Upsell & Cross-Sell" → "Packaging"). Each uom.uom carries
+// `relative_factor` — how many of `relative_uom_id` make up one of this
+// unit (e.g. "صندوق 60" has relative_factor=60, relative_uom_id=Units, i.e.
+// a box holds 60 pieces). We read relative_factor directly as the pack
+// qty; for a uom chained off something other than the product's own base
+// unit (e.g. a "دزينة" defined relative to "قطعة" rather than "Units"),
+// this is an approximation — good enough for a quantity shortcut chip,
+// not exact unit conversion.
+//
+// Verified live against this Odoo (2026-07-17): `ir.model` lookups are
+// blocked for the API user, and `product.packaging` raises "Object
+// product.packaging doesn't exist" even though stock/sale_stock/
+// website_sale are all installed — confirming the model is genuinely gone
+// in this Odoo version, not just a disabled feature or wrong DB.
 
 export type OdooPackaging = {
   id: number;
@@ -528,61 +541,62 @@ export type OdooPackaging = {
   qty: number;
 };
 
-type RawPackaging = {
+type RawUom = {
   id: number;
   name: string;
-  qty: number;
-  product_id: [number, string] | false;
+  relative_factor: number;
 };
 
-/// Fetches all product.packaging rows for the given templates. Returns an
-/// empty map (rather than throwing) if the Inventory "Packaging" feature is
-/// disabled in Odoo, since that's a normal, expected config — not a sync error.
+/// Fetches each template's extra Units of Measure (Odoo's stand-in for
+/// sellable pack sizes) and returns them keyed by template id. Returns an
+/// empty map (rather than throwing) only when a template simply has none —
+/// real Odoo errors propagate so a sync failure is never silently hidden as
+/// "no packaging".
 export async function fetchOdooPackagingsByTemplate(
   templateIds: number[],
 ): Promise<Map<number, OdooPackaging[]>> {
   const byTemplate = new Map<number, OdooPackaging[]>();
   if (templateIds.length === 0) return byTemplate;
 
-  let raw: RawPackaging[];
-  try {
-    raw = await callKw<RawPackaging[]>(
-      "product.packaging",
-      "search_read",
-      [[["product_id.product_tmpl_id", "in", templateIds], ["active", "=", true]]],
-      { fields: ["id", "name", "qty", "product_id"], limit: 5000, context: langCtx },
-    );
-  } catch {
-    return byTemplate;
-  }
-  if (raw.length === 0) return byTemplate;
-
-  // Resolve each packaging's SKU (product_id) to its parent template.
-  const skuIds = Array.from(
-    new Set(raw.map((p) => (p.product_id ? p.product_id[0] : null)).filter((id): id is number => id !== null)),
-  );
-  const templateOfSku = new Map<number, number>();
-  for (let i = 0; i < skuIds.length; i += 200) {
-    const chunk = await callKw<Array<{ id: number; product_tmpl_id: [number, string] | false }>>(
-      "product.product",
+  const uomIdsByTemplate = new Map<number, number[]>();
+  const allUomIds = new Set<number>();
+  for (let i = 0; i < templateIds.length; i += 200) {
+    const chunk = await callKw<Array<{ id: number; uom_ids: number[] }>>(
+      "product.template",
       "read",
-      [skuIds.slice(i, i + 200)],
-      { fields: ["id", "product_tmpl_id"] },
+      [templateIds.slice(i, i + 200)],
+      { fields: ["id", "uom_ids"] },
     );
-    for (const c of chunk) {
-      if (c.product_tmpl_id) templateOfSku.set(c.id, c.product_tmpl_id[0]);
+    for (const t of chunk) {
+      if (!t.uom_ids?.length) continue;
+      uomIdsByTemplate.set(t.id, t.uom_ids);
+      t.uom_ids.forEach((id) => allUomIds.add(id));
     }
   }
+  if (allUomIds.size === 0) return byTemplate;
 
-  for (const p of raw) {
-    if (!p.product_id) continue;
-    const tid = templateOfSku.get(p.product_id[0]);
-    if (tid === undefined) continue;
-    const list = byTemplate.get(tid) ?? [];
-    list.push({ id: p.id, templateId: tid, name: p.name, qty: Math.max(1, Math.round(p.qty)) });
-    byTemplate.set(tid, list);
+  const uomById = new Map<number, RawUom>();
+  const uomIdList = Array.from(allUomIds);
+  for (let i = 0; i < uomIdList.length; i += 200) {
+    const chunk = await callKw<RawUom[]>(
+      "uom.uom",
+      "read",
+      [uomIdList.slice(i, i + 200)],
+      { fields: ["id", "name", "relative_factor"], context: langCtx },
+    );
+    for (const u of chunk) uomById.set(u.id, u);
   }
-  byTemplate.forEach((list) => list.sort((a, b) => a.qty - b.qty));
+
+  uomIdsByTemplate.forEach((uomIds, tid) => {
+    const list: OdooPackaging[] = [];
+    for (const uid of uomIds) {
+      const u = uomById.get(uid);
+      if (!u) continue;
+      list.push({ id: u.id, templateId: tid, name: u.name, qty: Math.max(1, Math.round(u.relative_factor)) });
+    }
+    list.sort((a, b) => a.qty - b.qty);
+    byTemplate.set(tid, list);
+  });
 
   return byTemplate;
 }

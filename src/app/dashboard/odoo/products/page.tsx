@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   RefreshCw, Search, Package, TrendingUp, ShoppingCart,
-  Archive, ChevronDown, ChevronUp, Tag, Layers,
+  Archive, ChevronDown, ChevronUp, Tag, Layers, Boxes,
 } from "lucide-react";
 import { type OdooProductRow, syncOdooProducts } from "@/lib/api";
 import { SkeletonCards } from "@/components/ui/Skeleton";
@@ -26,6 +26,7 @@ export default function OdooProductsPage() {
   const [search, setSearch]     = useState("");
   const [syncing, setSyncing]   = useState(false);
   const [error, setError]       = useState("");
+  const [packagingWarning, setPackagingWarning] = useState("");
   const [syncedAt, setSyncedAt] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -39,11 +40,13 @@ export default function OdooProductsPage() {
   async function onSync() {
     setSyncing(true);
     setError("");
+    setPackagingWarning("");
     try {
       const json = await syncOdooProducts();
       if (json.error) { setError(json.error); return; }
       setProducts(json.data ?? []);
       setSyncedAt(json.synced_at ?? "");
+      setPackagingWarning(json.packaging_warning ?? "");
       try { localStorage.setItem("awl_odoo_products", JSON.stringify({ data: json.data, synced_at: json.synced_at })); } catch {}
     } catch {
       setError("فشلت المزامنة — تحقق من إعدادات Odoo");
@@ -166,6 +169,21 @@ export default function OdooProductsPage() {
 
       {/* CONTENT */}
       {error && <ErrorBanner message={error} />}
+      {!error && packagingWarning && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "#FFFBEB", border: "1px solid rgba(245,158,11,0.3)",
+          borderRadius: 12, padding: "10px 16px", marginBottom: 16,
+          fontSize: 12.5, color: "#92400E", fontWeight: 600,
+        }}>
+          <span style={{ fontSize: 16 }}>⚠</span>
+          <span>
+            تعذّرت مزامنة أحجام التعبئة من Odoo — {packagingWarning}
+            {packagingWarning.includes("doesn't exist") &&
+              " (يبدو أن تطبيق المخزون / ميزة التعبئة غير مُثبّتة في Odoo)"}
+          </span>
+        </div>
+      )}
 
       {syncing && products.length === 0 && <SkeletonCards count={8} />}
 
@@ -394,6 +412,22 @@ function ProductCard({
             {p.variant_count} خيارات
           </span>
         )}
+        {/* Packaging flag — Odoo's product.packaging sellable pack sizes */}
+        {(p.packagings ?? []).length > 0 && (
+          <span
+            style={{
+              position: "absolute", bottom: 10, left: 10,
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10, fontWeight: 800, padding: "3px 9px",
+              borderRadius: 9999, background: "#ECFDF5", color: "#047857",
+              border: "1px solid rgba(4,120,87,0.20)",
+              boxShadow: "0 1px 4px rgba(0,0,0,.08)",
+            }}
+          >
+            <Boxes size={9} />
+            {(p.packagings ?? []).length} تعبئات
+          </span>
+        )}
       </div>
 
       {/* Body */}
@@ -480,11 +514,39 @@ function ProductCard({
 
       {/* Expanded details */}
       {expanded && (
-        <div style={{ borderTop: "1px dashed #E2E8F0", padding: "12px 16px", background: "#F8FAFC", display: "flex", flexWrap: "wrap", gap: 18 }}>
-          <MiniField label="يُباع" value={p.sale_ok ? "✓ نعم" : "لا"} />
-          <MiniField label="يُشترى" value={p.purchase_ok ? "✓ نعم" : "لا"} />
-          {p.weight > 0 && <MiniField label="الوزن (كغ)" value={String(p.weight)} />}
-          {p.volume > 0 && <MiniField label="الحجم (م³)" value={String(p.volume)} />}
+        <div style={{ borderTop: "1px dashed #E2E8F0", padding: "12px 16px", background: "#F8FAFC", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+            <MiniField label="يُباع" value={p.sale_ok ? "✓ نعم" : "لا"} />
+            <MiniField label="يُشترى" value={p.purchase_ok ? "✓ نعم" : "لا"} />
+            {p.weight > 0 && <MiniField label="الوزن (كغ)" value={String(p.weight)} />}
+            {p.volume > 0 && <MiniField label="الحجم (م³)" value={String(p.volume)} />}
+          </div>
+          {(p.packagings ?? []).length > 0 && (
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#CBD5E1", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>
+                أحجام التعبئة
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(p.packagings ?? []).map((pk) => (
+                  <span
+                    key={pk.id}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontSize: 11, fontWeight: 700, padding: "4px 10px",
+                      borderRadius: 8, background: "#ECFDF5", color: "#047857",
+                      border: "1px solid rgba(4,120,87,0.18)",
+                    }}
+                  >
+                    <Boxes size={11} />
+                    {pk.name}
+                    <span style={{ fontFamily: "monospace", direction: "ltr", opacity: 0.75 }}>
+                      × {pk.qty}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

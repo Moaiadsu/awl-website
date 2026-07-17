@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { fetchOdooProducts, fetchOdooVariantsByTemplate, fetchOdooPackagingsByTemplate } from "@/lib/odoo";
+import {
+  fetchOdooProducts,
+  fetchOdooVariantsByTemplate,
+  fetchOdooPackagingsByTemplate,
+  type OdooPackaging,
+} from "@/lib/odoo";
 
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8080";
 
@@ -30,12 +35,45 @@ function mapProduct(p: Awaited<ReturnType<typeof fetchOdooProducts>>[number]) {
   };
 }
 
+// Resolves each template's sellable pack sizes (Odoo's product.packaging,
+// e.g. "Box of 60" / "Set of 10") for display on the product card. Sync/read
+// still succeeds without them.
+async function withPackagings(
+  fresh: Awaited<ReturnType<typeof fetchOdooProducts>>,
+  data: ReturnType<typeof mapProduct>[],
+): Promise<{ data: (ReturnType<typeof mapProduct> & { packagings: { id: number; name: string; qty: number }[] })[]; packagingWarning?: string }> {
+  try {
+    const packagingsByTemplate = await fetchOdooPackagingsByTemplate(fresh.map((p) => p.id));
+    return {
+      data: data.map((p) => ({
+        ...p,
+        packagings: (packagingsByTemplate.get(p.id) ?? []).map((pk) => ({
+          id: pk.id,
+          name: pk.name,
+          qty: pk.qty,
+        })),
+      })),
+    };
+  } catch (e) {
+    // Surfaced to the dashboard (not just the server log) — a silently
+    // swallowed error here previously made "packaging never shows up" look
+    // like a display bug when it was actually a failed Odoo call.
+    const message = e instanceof Error ? e.message : "packaging fetch failed";
+    console.error("[odoo/products] packaging fetch error", e);
+    return { data: data.map((p) => ({ ...p, packagings: [] })), packagingWarning: message };
+  }
+}
+
 // GET — fetch directly from Odoo so all fields are available
 export async function GET() {
   try {
     const fresh = await fetchOdooProducts();
-    const data = fresh.map(mapProduct);
-    return NextResponse.json({ data, synced_at: new Date().toISOString() });
+    const { data, packagingWarning } = await withPackagings(fresh, fresh.map(mapProduct));
+    return NextResponse.json({
+      data,
+      synced_at: new Date().toISOString(),
+      ...(packagingWarning ? { packaging_warning: packagingWarning } : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch products";
     console.error("[odoo/products] GET", message);
@@ -47,7 +85,7 @@ export async function GET() {
 export async function POST() {
   try {
     const fresh = await fetchOdooProducts();
-    const data = fresh.map(mapProduct);
+    const mapped = fresh.map(mapProduct);
 
     // Resolve each template's generated SKUs (product.product) so size/pack
     // variations reach the app catalog. Sync still succeeds without them.
@@ -59,13 +97,29 @@ export async function POST() {
     });
 
     // Resolve each template's sellable pack sizes (Odoo's product.packaging,
-    // e.g. "Set of 1" / "Box of 12"). Sync still succeeds without them.
-    const packagingsByTemplate = await fetchOdooPackagingsByTemplate(
-      fresh.map((p) => p.id),
-    ).catch((e) => {
+    // e.g. "Set of 1" / "Box of 12"). Sync still succeeds without them, but
+    // the failure reason is surfaced below instead of silently swallowed —
+    // an empty `packagings` array looked like a display bug when it was
+    // actually a failed Odoo call (e.g. missing model access).
+    let packagingsByTemplate = new Map<number, OdooPackaging[]>();
+    let packagingWarning: string | undefined;
+    try {
+      packagingsByTemplate = await fetchOdooPackagingsByTemplate(fresh.map((p) => p.id));
+    } catch (e) {
+      packagingWarning = e instanceof Error ? e.message : "packaging fetch failed";
       console.error("[odoo/products] packaging fetch error", e);
-      return new Map<number, never[]>();
-    });
+    }
+
+    // Also carry packagings on the dashboard response so the product card
+    // reflects them immediately after a sync, not just on the next GET.
+    const data = mapped.map((p) => ({
+      ...p,
+      packagings: (packagingsByTemplate.get(p.id) ?? []).map((pk) => ({
+        id: pk.id,
+        name: pk.name,
+        qty: pk.qty,
+      })),
+    }));
 
     const slim = fresh.map((p) => ({
       id: p.id,
@@ -131,6 +185,7 @@ export async function POST() {
       synced_at: new Date().toISOString(),
       count: data.length,
       backend_sync: backendSync,
+      ...(packagingWarning ? { packaging_warning: packagingWarning } : {}),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to sync products";

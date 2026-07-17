@@ -133,6 +133,12 @@ function normProduct(p: any) {
       barcode:   v.barcode   ?? "",
       image_url: v.imageUrl  ?? v.image_url ?? "",
     })),
+    packagings:  (p.packagings ?? []).map((pk: any) => ({
+      id:      pk.id,
+      name:    pk.name   ?? "",
+      name_ar: pk.nameAr ?? pk.name_ar ?? "",
+      qty:     pk.qty    ?? 0,
+    })),
   };
 }
 
@@ -392,6 +398,15 @@ export type OdooProductRow = {
   volume: number;
   image_128: string;
   variant_count: number;
+  packagings: OdooProductPackagingRow[];
+};
+
+// Sellable pack size from Odoo's product.packaging model (e.g. name="Box of
+// 60" qty=60), shown on the product card and synced to the app catalog.
+export type OdooProductPackagingRow = {
+  id: number;
+  name: string;
+  qty: number;
 };
 
 export const getOdooContacts = (): Promise<{ data: OdooContactRow[]; synced_at: string; error?: string }> =>
@@ -404,8 +419,12 @@ export const syncOdooContacts = (): Promise<{
   error?: string;
 }> => fetch("/api/dashboard/contacts", { method: "POST" }).then((r) => r.json());
 
-export const getOdooProducts = (): Promise<{ data: OdooProductRow[]; synced_at: string; error?: string }> =>
-  fetch("/api/dashboard/products", { cache: "no-store" }).then((r) => r.json());
+export const getOdooProducts = (): Promise<{
+  data: OdooProductRow[];
+  synced_at: string;
+  error?: string;
+  packaging_warning?: string;
+}> => fetch("/api/dashboard/products", { cache: "no-store" }).then((r) => r.json());
 
 export type NewContactPayload = {
   name: string;
@@ -462,4 +481,5 @@ export const syncOdooProducts = (): Promise<{
   synced_at: string;
   count: number;
   error?: string;
+  packaging_warning?: string;
 }> => fetch("/api/dashboard/products", { method: "POST" }).then((r) => r.json());

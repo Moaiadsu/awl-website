@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { getProducts } from "@/lib/api";
-import { Search, Tag, Package, TrendingUp, ShoppingCart, Archive, Layers } from "lucide-react";
+import { Search, Tag, Package, TrendingUp, ShoppingCart, Archive, Layers, Boxes } from "lucide-react";
 import { SkeletonCards } from "@/components/ui/Skeleton";
 
 type ProductVariant = {
@@ -12,6 +12,15 @@ type ProductVariant = {
   stock: number;
   barcode: string;
   image_url: string; // variant photo; "" = falls back to the product image
+};
+
+// Sellable pack size from Odoo's product.packaging (e.g. name_ar="حزمة x
+// صندوق" qty=60) — no price of its own, just a quantity shortcut.
+type ProductPackaging = {
+  id: string;
+  name: string;
+  name_ar: string;
+  qty: number;
 };
 
 type Product = {
@@ -26,6 +35,7 @@ type Product = {
   image_url: string;
   barcode: string;
   variants: ProductVariant[];
+  packagings: ProductPackaging[];
 };
 
 const CAT_PALETTE: Record<string, { bg: string; fg: string; accent: string }> = {
@@ -348,6 +358,7 @@ function VariantChip({
 
 function ProductDialog({ product: p, onClose }: { product: Product; onClose: () => void }) {
   const variants = p.variants ?? [];
+  const packagings = p.packagings ?? [];
   const [active, setActive] = useState<ProductVariant | null>(null);
 
   const image = active?.image_url || p.image_url;
@@ -474,6 +485,34 @@ function ProductDialog({ product: p, onClose }: { product: Product; onClose: () 
             </div>
           )}
 
+          {/* Packaging — sellable pack sizes from Odoo's product.packaging */}
+          {packagings.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#0A1628", marginBottom: 8 }}>
+                أحجام التعبئة ({packagings.length})
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {packagings.map((pk) => (
+                  <span
+                    key={pk.id}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontSize: 11, fontWeight: 700, padding: "4px 10px",
+                      borderRadius: 8, background: "#ECFDF5", color: "#047857",
+                      border: "1px solid rgba(4,120,87,0.18)",
+                    }}
+                  >
+                    <Boxes size={11} />
+                    {pk.name_ar || pk.name}
+                    <span style={{ fontFamily: "monospace", direction: "ltr", opacity: 0.75 }}>
+                      × {pk.qty}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Meta */}
           <div style={{
             display: "flex", gap: 16, paddingTop: 10,
@@ -502,6 +541,8 @@ function AppProductCard({ product: p, onOpen }: { product: Product; onOpen: () =
   const stockLow  = !stockZero && p.stock <= 10;
   const variants  = p.variants ?? [];
   const hasVariants = variants.length > 0;
+  const packagings = p.packagings ?? [];
+  const hasPackagings = packagings.length > 0;
 
   return (
     <div
@@ -584,6 +625,20 @@ function AppProductCard({ product: p, onOpen }: { product: Product; onOpen: () =
           }}>
             <Layers size={9} />
             {variants.length} خيارات
+          </span>
+        )}
+        {/* Packaging flag — bottom left, only when the product has pack sizes */}
+        {hasPackagings && (
+          <span style={{
+            position: "absolute", bottom: 10, left: 10,
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 10, fontWeight: 800, padding: "3px 9px",
+            borderRadius: 9999, background: "#ECFDF5", color: "#047857",
+            border: "1px solid rgba(4,120,87,0.20)",
+            boxShadow: "0 1px 4px rgba(0,0,0,.08)",
+          }}>
+            <Boxes size={9} />
+            {packagings.length} تعبئات
           </span>
         )}
       </div>
