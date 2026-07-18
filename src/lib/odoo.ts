@@ -39,7 +39,10 @@ export type OdooProduct = {
   purchase_ok: boolean;
   weight: number;
   volume: number;
-  image_128: string | false;
+  // Requested at 1024px (Odoo's server-derived size, same source image as
+  // image_128 just resized larger) — the 128px thumbnail was visibly
+  // blurry once stretched to fill a 260-280px+ product image card.
+  image_1024: string | false;
   product_variant_count: number;
 };
 
@@ -317,7 +320,7 @@ export async function fetchOdooProducts(): Promise<OdooProduct[]> {
         "qty_available", "barcode", "default_code",
         "categ_id", "type", "description_sale",
         "sale_ok", "purchase_ok",
-        "weight", "volume", "image_128",
+        "weight", "volume", "image_1024",
         "product_variant_count",
       ],
       limit: 500,
@@ -452,24 +455,27 @@ export async function fetchOdooVariantsByTemplate(
   });
 
   // 4. Variant images for the SKUs that survived the grouping. Resolution
-  //    chain: the SKU's own photo (image_variant_128) → the photo set on the
-  //    attribute value itself (product.attribute.value.image — where the
-  //    "الخصائص والمتغيرات" upload lands) → empty, so clients fall back to
-  //    the parent product image.
+  //    chain: the SKU's own photo (image_variant_1024 — requested at 1024px
+  //    so it isn't blurry once stretched to the product image card; same
+  //    source photo as image_variant_128, just a bigger server-derived
+  //    size) → the photo set on the attribute value itself
+  //    (product.attribute.value.image — where the "الخصائص والمتغيرات"
+  //    upload lands) → empty, so clients fall back to the parent product
+  //    image.
   const keptIds: number[] = [];
   byTemplate.forEach((list) => list.forEach((v) => keptIds.push(v.id)));
   const imageBySku = new Map<number, string>();
   const ptavBySku = new Map<number, number[]>();
   for (const v of raw) ptavBySku.set(v.id, v.product_template_attribute_value_ids);
   for (let i = 0; i < keptIds.length; i += 200) {
-    const chunk = await callKw<Array<{ id: number; image_variant_128: string | false }>>(
+    const chunk = await callKw<Array<{ id: number; image_variant_1024: string | false }>>(
       "product.product",
       "read",
       [keptIds.slice(i, i + 200)],
-      { fields: ["id", "image_variant_128"] },
+      { fields: ["id", "image_variant_1024"] },
     );
     for (const c of chunk) {
-      if (c.image_variant_128 !== false) imageBySku.set(c.id, c.image_variant_128);
+      if (c.image_variant_1024 !== false) imageBySku.set(c.id, c.image_variant_1024);
     }
   }
 

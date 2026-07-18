@@ -30,7 +30,9 @@ function mapProduct(p: Awaited<ReturnType<typeof fetchOdooProducts>>[number]) {
     purchase_ok: p.purchase_ok,
     weight: p.weight,
     volume: p.volume,
-    image_128: p.image_128 === false ? "" : p.image_128,
+    // Wire key stays `image_128` (matches OdooProductRow/the Go backend's
+    // JSON tag/the mobile app) — only the source Odoo field got bigger.
+    image_128: p.image_1024 === false ? "" : p.image_1024,
     variant_count: p.product_variant_count ?? 1,
   };
 }
@@ -128,7 +130,9 @@ export async function POST() {
       qty_available: p.qty_available,
       barcode: p.barcode === false ? "" : p.barcode,
       category: p.categ_id ? p.categ_id[1] : "",
-      image_128: p.image_128 === false ? "" : p.image_128,
+      // Wire key stays `image_128` (Go backend's JSON tag, mobile app) —
+      // only the source Odoo field is bigger now.
+      image_128: p.image_1024 === false ? "" : p.image_1024,
       variants: (variantsByTemplate.get(p.id) ?? []).map((v) => ({
         id: `odoo-var-${v.id}`,
         label: v.label,
